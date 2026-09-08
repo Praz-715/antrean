@@ -1,0 +1,259 @@
+/**
+ * Katalog pengaturan sistem (§49).
+ *
+ * Satu katalog dipakai tiga pihak sekaligus: server memvalidasi dan mengisi nilai
+ * bawaan darinya, halaman admin merender formulirnya secara generik, dan kode fitur
+ * membaca nilainya lewat kunci yang sama. Menambah pengaturan baru cukup satu entri
+ * di sini — tidak ada lagi daftar kunci yang tercecer di tiga tempat lalu berbeda.
+ */
+
+export const SETTING_KEYS = {
+  QUEUE_NUMBER_LENGTH: 'queue.numberLength',
+  QUEUE_DEFAULT_PREFIX: 'queue.defaultPrefix',
+  QUEUE_AUTO_CLOSE: 'queue.autoClose',
+  QUEUE_AUTO_RESET: 'queue.autoReset',
+  QUEUE_RECALL_LIMIT: 'queue.recallLimit',
+  QUEUE_MAX_WAITING: 'queue.maxWaiting',
+  QUEUE_PUBLIC_REGISTRATION: 'queue.publicRegistration',
+  FEEDBACK_RATING_ENABLED: 'feedback.ratingEnabled',
+  FEEDBACK_AUTO_APPROVE: 'feedback.autoApprove',
+  DISPLAY_VOICE_ENABLED: 'display.voiceEnabled',
+  DISPLAY_VOICE_LANGUAGE: 'display.voiceLanguage',
+  DISPLAY_TIMEOUT_SECONDS: 'display.timeoutSeconds',
+  SYSTEM_TIMEZONE: 'system.timezone',
+  SYSTEM_SESSION_MINUTES: 'system.sessionDurationMinutes',
+} as const
+
+export type SettingKey = (typeof SETTING_KEYS)[keyof typeof SETTING_KEYS]
+
+export type SettingValue = boolean | number | string
+
+export interface SettingDefinition {
+  key: SettingKey
+  label: string
+  help: string
+  group: SettingGroupKey
+  type: 'boolean' | 'number' | 'text' | 'select'
+  default: SettingValue
+  min?: number
+  max?: number
+  maxLength?: number
+  unit?: string
+  options?: Array<{ label: string, value: string }>
+  /** Nilai ini juga bisa ditimpa per-event lewat `events.settings`. */
+  eventOverride?: string
+}
+
+export type SettingGroupKey = 'queue' | 'feedback' | 'display' | 'system'
+
+export const SETTING_GROUPS: Array<{ key: SettingGroupKey, label: string, icon: string, description: string }> = [
+  {
+    key: 'queue',
+    label: 'Antrean',
+    icon: 'i-lucide-ticket',
+    description: 'Nilai bawaan penomoran dan aturan yang berlaku untuk seluruh event.',
+  },
+  {
+    key: 'feedback',
+    label: 'Rating & Testimoni',
+    icon: 'i-lucide-star',
+    description: 'Penilaian yang diminta ke pengunjung setelah selesai dilayani.',
+  },
+  {
+    key: 'display',
+    label: 'Display & Suara',
+    icon: 'i-lucide-monitor-speaker',
+    description: 'Perilaku bawaan layar antrean dan pengumuman suara.',
+  },
+  {
+    key: 'system',
+    label: 'Sistem',
+    icon: 'i-lucide-server-cog',
+    description: 'Zona waktu dan keamanan sesi.',
+  },
+]
+
+export const TIMEZONE_OPTIONS = [
+  { label: 'WIB — Asia/Jakarta', value: 'Asia/Jakarta' },
+  { label: 'WITA — Asia/Makassar', value: 'Asia/Makassar' },
+  { label: 'WIT — Asia/Jayapura', value: 'Asia/Jayapura' },
+]
+
+export const SETTINGS_CATALOG: SettingDefinition[] = [
+  {
+    key: SETTING_KEYS.QUEUE_NUMBER_LENGTH,
+    label: 'Panjang nomor antrean',
+    help: 'Jumlah digit setelah prefix. 3 menghasilkan A001, 4 menghasilkan A0001.',
+    group: 'queue',
+    type: 'number',
+    default: 3,
+    min: 1,
+    max: 6,
+    unit: 'digit',
+  },
+  {
+    key: SETTING_KEYS.QUEUE_DEFAULT_PREFIX,
+    label: 'Prefix bawaan',
+    help: 'Dipakai saat jenis antrean baru dibuat dan prefix belum diisi.',
+    group: 'queue',
+    type: 'text',
+    default: 'A',
+    maxLength: 10,
+  },
+  {
+    key: SETTING_KEYS.QUEUE_AUTO_CLOSE,
+    label: 'Tutup otomatis di luar jam layanan',
+    help: 'Event OPEN berhenti menerima antrean baru begitu melewati jam tutup pada jadwalnya.',
+    group: 'queue',
+    type: 'boolean',
+    default: true,
+  },
+  {
+    key: SETTING_KEYS.QUEUE_AUTO_RESET,
+    label: 'Reset nomor tiap hari',
+    help: 'Nomor kembali ke urutan awal pada tanggal layanan berikutnya.',
+    group: 'queue',
+    type: 'boolean',
+    default: true,
+  },
+  {
+    key: SETTING_KEYS.QUEUE_RECALL_LIMIT,
+    label: 'Batas panggil ulang',
+    help: '0 berarti tanpa batas. Bisa ditimpa per event.',
+    group: 'queue',
+    type: 'number',
+    default: 3,
+    min: 0,
+    max: 20,
+    unit: 'kali',
+    eventOverride: 'recallLimit',
+  },
+  {
+    key: SETTING_KEYS.QUEUE_MAX_WAITING,
+    label: 'Maksimum antrean menunggu',
+    help: '0 berarti tanpa batas. Kuota per jenis antrean tetap didahulukan bila diisi.',
+    group: 'queue',
+    type: 'number',
+    default: 0,
+    min: 0,
+    max: 100000,
+    unit: 'antrean',
+    eventOverride: 'maxWaitingPerType',
+  },
+  {
+    key: SETTING_KEYS.QUEUE_PUBLIC_REGISTRATION,
+    label: 'Pendaftaran mandiri pengunjung',
+    help: 'Bila dimatikan, halaman publik hanya menampilkan informasi — pengambilan nomor ditolak.',
+    group: 'queue',
+    type: 'boolean',
+    default: true,
+  },
+  {
+    key: SETTING_KEYS.FEEDBACK_RATING_ENABLED,
+    label: 'Minta rating setelah dilayani',
+    help: 'Form penilaian muncul di halaman pelacakan pengunjung saat antrean selesai.',
+    group: 'feedback',
+    type: 'boolean',
+    default: true,
+    eventOverride: 'ratingEnabled',
+  },
+  {
+    key: SETTING_KEYS.FEEDBACK_AUTO_APPROVE,
+    label: 'Setujui testimoni otomatis',
+    help: 'Bila dimatikan, testimoni baru berstatus menunggu moderasi sebelum bisa ditampilkan.',
+    group: 'feedback',
+    type: 'boolean',
+    default: false,
+  },
+  {
+    key: SETTING_KEYS.DISPLAY_VOICE_ENABLED,
+    label: 'Panggilan suara di display',
+    help: 'Layar membacakan nomor yang dipanggil memakai suara peramban.',
+    group: 'display',
+    type: 'boolean',
+    default: true,
+    eventOverride: 'voiceEnabled',
+  },
+  {
+    key: SETTING_KEYS.DISPLAY_VOICE_LANGUAGE,
+    label: 'Bahasa suara',
+    help: 'Dipakai untuk memilih suara yang tersedia di perangkat display.',
+    group: 'display',
+    type: 'select',
+    default: 'id-ID',
+    options: [
+      { label: 'Indonesia', value: 'id-ID' },
+      { label: 'English (US)', value: 'en-US' },
+    ],
+    eventOverride: 'voiceLanguage',
+  },
+  {
+    key: SETTING_KEYS.DISPLAY_TIMEOUT_SECONDS,
+    label: 'Ambang display dianggap offline',
+    help: 'Layar yang tidak mengirim kabar selama durasi ini ditandai OFFLINE di daftar perangkat.',
+    group: 'display',
+    type: 'number',
+    default: 60,
+    min: 10,
+    max: 600,
+    unit: 'detik',
+  },
+  {
+    key: SETTING_KEYS.SYSTEM_TIMEZONE,
+    label: 'Zona waktu bawaan',
+    help: 'Dipakai untuk event baru. Tanggal layanan tiap event tetap mengikuti zona waktunya sendiri.',
+    group: 'system',
+    type: 'select',
+    default: 'Asia/Jakarta',
+    options: TIMEZONE_OPTIONS,
+  },
+  {
+    key: SETTING_KEYS.SYSTEM_SESSION_MINUTES,
+    label: 'Durasi sesi login',
+    help: 'Sesi yang lebih tua dari durasi ini ditolak walau cookie-nya masih ada.',
+    group: 'system',
+    type: 'number',
+    default: 10080,
+    min: 15,
+    max: 43200,
+    unit: 'menit',
+  },
+]
+
+export const SETTINGS_BY_KEY: Record<string, SettingDefinition> = Object.fromEntries(
+  SETTINGS_CATALOG.map(def => [def.key, def]),
+)
+
+export type SettingsMap = Record<SettingKey, SettingValue>
+
+export const DEFAULT_SETTINGS = Object.fromEntries(
+  SETTINGS_CATALOG.map(def => [def.key, def.default]),
+) as SettingsMap
+
+/**
+ * Paksa nilai apa pun menjadi bentuk yang sesuai definisinya.
+ *
+ * Nilai tersimpan berasal dari kolom JSON, jadi tipe aslinya bisa saja bergeser
+ * setelah definisi berubah (mis. teks menjadi angka). Mengembalikan nilai bawaan
+ * lebih baik daripada meloloskan `"true"` sebagai boolean ke dalam logika fitur.
+ */
+export function coerceSetting(def: SettingDefinition, raw: unknown): SettingValue {
+  if (raw === null || raw === undefined) return def.default
+
+  switch (def.type) {
+    case 'boolean':
+      return typeof raw === 'boolean' ? raw : raw === 'true' || raw === 1
+    case 'number': {
+      const n = typeof raw === 'number' ? raw : Number(raw)
+      if (!Number.isFinite(n)) return def.default
+      const clamped = Math.min(def.max ?? Number.MAX_SAFE_INTEGER, Math.max(def.min ?? 0, Math.round(n)))
+      return clamped
+    }
+    case 'select': {
+      const s = String(raw)
+      return def.options?.some(o => o.value === s) ? s : def.default
+    }
+    case 'text':
+      return String(raw).slice(0, def.maxLength ?? 190)
+  }
+}

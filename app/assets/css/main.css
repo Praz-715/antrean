@@ -1,0 +1,62 @@
+@import "tailwindcss";
+@import "@nuxt/ui";
+
+/* ------------------------------------------------------------------
+   ANTREAN design tokens
+   Warna brand: biru laut yang tenang + aksen amber untuk "sedang dipanggil"
+------------------------------------------------------------------ */
+@theme static {
+  --font-sans: "Plus Jakarta Sans", ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif;
+  --font-mono: "JetBrains Mono", ui-monospace, "Cascadia Code", monospace;
+
+  --color-brand-50: #eef6ff;
+  --color-brand-100: #d9eaff;
+  --color-brand-200: #bcdaff;
+  --color-brand-300: #8ec3ff;
+  --color-brand-400: #59a1ff;
+  --color-brand-500: #337dff;
+  --color-brand-600: #1b5cf5;
+  --color-brand-700: #1547e1;
+  --color-brand-800: #183bb6;
+  --color-brand-900: #19378f;
+  --color-brand-950: #142257;
+}
+
+:root {
+  --ui-primary: var(--color-brand-600);
+}
+
+/* Status antrean — dipakai badge & display */
+@utility status-waiting {
+  @apply bg-slate-100 text-slate-700 dark:bg-slate-800 dark:text-slate-300;
+}
+@utility status-called {
+  @apply bg-amber-100 text-amber-800 dark:bg-amber-950 dark:text-amber-300;
+}
+@utility status-serving {
+  @apply bg-blue-100 text-blue-800 dark:bg-blue-950 dark:text-blue-300;
+}
+@utility status-completed {
+  @apply bg-emerald-100 text-emerald-800 dark:bg-emerald-950 dark:text-emerald-300;
+}
+@utility status-skipped {
+  @apply bg-orange-100 text-orange-800 dark:bg-orange-950 dark:text-orange-300;
+}
+@utility status-cancelled {
+  @apply bg-rose-100 text-rose-800 dark:bg-rose-950 dark:text-rose-300;
+}
+
+/* Angka antrean besar (display & tiket) */
+@utility queue-number {
+  font-variant-numeric: tabular-nums;
+  letter-spacing: -0.02em;
+  font-weight: 800;
+}
+
+html {
+  -webkit-tap-highlight-color: transparent;
+}
+
+body {
+  @apply antialiased;
+}
