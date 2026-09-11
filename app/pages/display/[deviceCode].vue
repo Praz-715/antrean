@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { apiFetch } from '../../composables/useApi'
-import { SOCKET_EVENTS } from '../../../shared/constants/socket'
-import { PRIORITY_LABEL, isPriorityQueue } from '../../../shared/constants/queue'
+import { SOCKET_EVENTS } from '#shared/constants/socket'
+import { PRIORITY_LABEL, isPriorityQueue } from '#shared/constants/queue'
 
 definePageMeta({ layout: false })
 

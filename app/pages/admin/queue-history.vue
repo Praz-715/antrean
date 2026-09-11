@@ -1,8 +1,8 @@
 <script setup lang="ts">
 import { apiFetch } from '../../composables/useApi'
-import { filterValue, SELECT_ALL } from '../../../shared/constants/ui'
-import { QUEUE_STATUS_COLOR, QUEUE_STATUS_LABEL } from '../../../shared/utils/queue-format'
-import { addDays, todayInTimezone } from '../../../shared/utils/service-date'
+import { filterValue, SELECT_ALL } from '#shared/constants/ui'
+import { QUEUE_STATUS_COLOR, QUEUE_STATUS_LABEL } from '#shared/utils/queue-format'
+import { addDays, todayInTimezone } from '#shared/utils/service-date'
 
 definePageMeta({ layout: 'admin', middleware: 'admin' })
 useHead({ title: 'Riwayat Antrean' })

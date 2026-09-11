@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ticketDate, type TicketPayload } from '../../../shared/utils/ticket'
+import { ticketDate, type TicketPayload } from '#shared/utils/ticket'
 
 /**
  * Tiket antrean yang siap dicetak (§46).

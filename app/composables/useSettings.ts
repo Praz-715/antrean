@@ -1,5 +1,5 @@
 import { apiFetch } from './useApi'
-import { DEFAULT_SETTINGS, type SettingKey, type SettingValue, type SettingsMap } from '../../shared/constants/settings'
+import { DEFAULT_SETTINGS, type SettingKey, type SettingValue, type SettingsMap } from '#shared/constants/settings'
 
 /**
  * Pengaturan sistem untuk sisi klien (§49).

@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { apiFetch } from '../../../composables/useApi'
-import { EVENT_STATUS_COLOR, EVENT_STATUS_LABEL } from '../../../../shared/utils/queue-format'
-import { PERMISSIONS } from '../../../../shared/constants/permissions'
+import { EVENT_STATUS_COLOR, EVENT_STATUS_LABEL } from '#shared/utils/queue-format'
+import { PERMISSIONS } from '#shared/constants/permissions'
 
 definePageMeta({ layout: 'admin', middleware: 'admin' })
 

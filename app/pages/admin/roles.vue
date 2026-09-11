@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { apiFetch } from '../../composables/useApi'
-import { PERMISSIONS, PERMISSION_GROUPS } from '../../../shared/constants/permissions'
+import { PERMISSIONS, PERMISSION_GROUPS } from '#shared/constants/permissions'
 
 definePageMeta({ layout: 'admin', middleware: 'admin' })
 useHead({ title: 'Role & Izin' })

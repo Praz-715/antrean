@@ -4,7 +4,8 @@
  */
 import { io } from 'socket.io-client'
 
-const BASE = 'http://localhost:3000'
+/** Alamat server yang diuji; timpa dengan SMOKE_BASE untuk menguji hasil build. */
+const BASE = process.env.SMOKE_BASE || 'http://localhost:3000'
 const deviceCode = process.argv[2]
 
 function connect(auth, label) {

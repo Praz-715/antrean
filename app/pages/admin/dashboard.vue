@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { apiFetch } from '../../composables/useApi'
-import { EVENT_STATUS_COLOR, EVENT_STATUS_LABEL } from '../../../shared/utils/queue-format'
+import { EVENT_STATUS_COLOR, EVENT_STATUS_LABEL } from '#shared/utils/queue-format'
 
 definePageMeta({ layout: 'admin', middleware: 'admin' })
 useHead({ title: 'Dashboard' })

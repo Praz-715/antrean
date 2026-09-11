@@ -1,8 +1,8 @@
 <script setup lang="ts">
 import { apiFetch } from '../../composables/useApi'
-import { PERMISSIONS } from '../../../shared/constants/permissions'
-import { SELECT_ALL, filterValue } from '../../../shared/constants/ui'
-import { todayInTimezone, addDays } from '../../../shared/utils/service-date'
+import { PERMISSIONS } from '#shared/constants/permissions'
+import { SELECT_ALL, filterValue } from '#shared/constants/ui'
+import { todayInTimezone, addDays } from '#shared/utils/service-date'
 
 definePageMeta({ layout: 'admin', middleware: 'admin' })
 useHead({ title: 'Rating & Testimoni' })
@@ -246,10 +246,10 @@ function timeText(value: string) {
         />
       </UFormField>
       <UFormField label="Dari tanggal" size="sm">
-        <UInput v-model="from" type="date" class="w-full" />
+        <UInput v-model="from" type="date" class="w-full" aria-label="Dari tanggal" />
       </UFormField>
       <UFormField label="Sampai tanggal" size="sm">
-        <UInput v-model="to" type="date" class="w-full" />
+        <UInput v-model="to" type="date" class="w-full" aria-label="Sampai tanggal" />
       </UFormField>
       <UFormField label="Cari komentar" size="sm">
         <UInput v-model="search" class="w-full" icon="i-lucide-search" placeholder="kata kunci" />

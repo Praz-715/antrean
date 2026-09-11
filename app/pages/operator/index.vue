@@ -1,9 +1,9 @@
 <script setup lang="ts">
 import { signOut } from '../../utils/auth-client'
 import { apiFetch } from '../../composables/useApi'
-import { QUEUE_STATUS_COLOR, QUEUE_STATUS_LABEL } from '../../../shared/utils/queue-format'
-import { PRIORITY_LABEL, isPriorityQueue } from '../../../shared/constants/queue'
-import { SOCKET_EVENTS } from '../../../shared/constants/socket'
+import { QUEUE_STATUS_COLOR, QUEUE_STATUS_LABEL } from '#shared/utils/queue-format'
+import { PRIORITY_LABEL, isPriorityQueue } from '#shared/constants/queue'
+import { SOCKET_EVENTS } from '#shared/constants/socket'
 
 definePageMeta({ layout: false, middleware: 'auth' })
 useHead({ title: 'Operator' })

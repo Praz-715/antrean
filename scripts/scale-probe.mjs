@@ -1,4 +1,5 @@
-const BASE = 'http://localhost:3000'
+/** Alamat server yang diuji; timpa dengan SMOKE_BASE untuk menguji hasil build. */
+const BASE = process.env.SMOKE_BASE || 'http://localhost:3000'
 let cookie = ''
 const call = async (m, p, b) => {
   const r = await fetch(BASE + p, {

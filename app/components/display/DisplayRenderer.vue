@@ -1,6 +1,6 @@
 <script setup lang="ts">
-import { CANVAS, type WidgetType } from '../../../shared/constants/widgets'
-import { PRIORITY_LABEL, isPriorityQueue } from '../../../shared/constants/queue'
+import { CANVAS, type WidgetType } from '#shared/constants/widgets'
+import { PRIORITY_LABEL, isPriorityQueue } from '#shared/constants/queue'
 
 /**
  * Menggambar satu template display pada kanvas 1920×1080, lalu menskalakannya

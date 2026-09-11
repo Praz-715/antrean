@@ -1,9 +1,9 @@
 <script setup lang="ts">
 import { apiFetch } from '../../composables/useApi'
-import { PERMISSIONS } from '../../../shared/constants/permissions'
-import { SELECT_ALL, filterValue } from '../../../shared/constants/ui'
-import { QUEUE_STATUS_LABEL } from '../../../shared/utils/queue-format'
-import { todayInTimezone, addDays } from '../../../shared/utils/service-date'
+import { PERMISSIONS } from '#shared/constants/permissions'
+import { SELECT_ALL, filterValue } from '#shared/constants/ui'
+import { QUEUE_STATUS_LABEL } from '#shared/utils/queue-format'
+import { todayInTimezone, addDays } from '#shared/utils/service-date'
 
 definePageMeta({ layout: 'admin', middleware: 'admin' })
 useHead({ title: 'Daftar Pengunjung' })
@@ -219,10 +219,10 @@ const statusClass: Record<string, string> = {
         />
       </UFormField>
       <UFormField label="Dari tanggal" size="sm">
-        <UInput v-model="from" type="date" class="w-full" />
+        <UInput v-model="from" type="date" class="w-full" aria-label="Dari tanggal" />
       </UFormField>
       <UFormField label="Sampai tanggal" size="sm">
-        <UInput v-model="to" type="date" class="w-full" />
+        <UInput v-model="to" type="date" class="w-full" aria-label="Sampai tanggal" />
       </UFormField>
     </div>
 

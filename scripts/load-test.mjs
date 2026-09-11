@@ -10,7 +10,8 @@
  */
 import { io } from 'socket.io-client'
 
-const BASE = 'http://localhost:3000'
+/** Alamat server yang diuji; timpa dengan SMOKE_BASE untuk menguji hasil build. */
+const BASE = process.env.SMOKE_BASE || 'http://localhost:3000'
 const TOTAL_QUEUES = Number(process.env.QUEUES || 2000)
 const TOTAL_DISPLAYS = Number(process.env.DISPLAYS || 200)
 const CONCURRENCY = Number(process.env.CONCURRENCY || 25)

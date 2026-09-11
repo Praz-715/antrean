@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { apiFetch } from '../../composables/useApi'
-import { addDays, todayInTimezone } from '../../../shared/utils/service-date'
-import { PERMISSIONS } from '../../../shared/constants/permissions'
+import { addDays, todayInTimezone } from '#shared/utils/service-date'
+import { PERMISSIONS } from '#shared/constants/permissions'
 
 definePageMeta({ layout: 'admin', middleware: 'admin' })
 useHead({ title: 'Laporan' })
@@ -412,10 +412,10 @@ function printReport() {
             />
           </UFormField>
           <UFormField label="Dari" size="xs">
-            <UInput v-model="exportForm.from" type="date" size="sm" class="w-40" />
+            <UInput v-model="exportForm.from" type="date" size="sm" class="w-40" aria-label="Ekspor dari tanggal" />
           </UFormField>
           <UFormField label="Sampai" size="xs">
-            <UInput v-model="exportForm.to" type="date" size="sm" class="w-40" />
+            <UInput v-model="exportForm.to" type="date" size="sm" class="w-40" aria-label="Ekspor sampai tanggal" />
           </UFormField>
           <UiActionButton
             icon="i-lucide-download"

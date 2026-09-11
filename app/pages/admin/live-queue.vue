@@ -1,8 +1,8 @@
 <script setup lang="ts">
 import { apiFetch } from '../../composables/useApi'
-import { filterValue, SELECT_ALL } from '../../../shared/constants/ui'
-import { QUEUE_STATUS_COLOR, QUEUE_STATUS_LABEL } from '../../../shared/utils/queue-format'
-import { SOCKET_EVENTS } from '../../../shared/constants/socket'
+import { filterValue, SELECT_ALL } from '#shared/constants/ui'
+import { QUEUE_STATUS_COLOR, QUEUE_STATUS_LABEL } from '#shared/utils/queue-format'
+import { SOCKET_EVENTS } from '#shared/constants/socket'
 
 definePageMeta({ layout: 'admin', middleware: 'admin' })
 useHead({ title: 'Antrean Live' })

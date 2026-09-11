@@ -1,8 +1,8 @@
 <script setup lang="ts">
 import { apiFetch } from '../../composables/useApi'
-import { formatQueueNumber, QUEUE_NUMBER_FORMAT_PRESETS } from '../../../shared/utils/queue-format'
-import { todayInTimezone } from '../../../shared/utils/service-date'
-import { PERMISSIONS } from '../../../shared/constants/permissions'
+import { formatQueueNumber, QUEUE_NUMBER_FORMAT_PRESETS } from '#shared/utils/queue-format'
+import { todayInTimezone } from '#shared/utils/service-date'
+import { PERMISSIONS } from '#shared/constants/permissions'
 
 definePageMeta({ layout: 'admin', middleware: 'admin' })
 useHead({ title: 'Jenis Antrean' })

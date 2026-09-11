@@ -107,7 +107,7 @@ Halaman publik contoh: `http://localhost:3000/p/demo2026`
 | `npm run db:seed:prod` | Seed minimal untuk instalasi baru (kata sandi acak, dicetak sekali) |
 | `npm run db:studio` | Prisma Studio |
 | `npm run test` | Seluruh test (unit + integrasi) |
-| `npm run smoke:api` | Sapu 53 endpoint pada server yang sedang berjalan |
+| `npm run smoke:api` | Sapu 55 endpoint pada server yang sedang berjalan |
 | `npm run smoke:browser` | Uji perilaku nyata di browser (Playwright) |
 | `npm run smoke:phase5` | Uji media library, playlist, dan display builder |
 | `npm run smoke:phase6` | Uji analytics, laporan, ekspor, dan audit log |
@@ -117,6 +117,26 @@ Halaman publik contoh: `http://localhost:3000/p/demo2026`
 | `npm run ux-audit` | Audit Function/UI/UX lewat peramban: responsif, kontras, aksesibilitas, umpan balik |
 | `npm run typecheck` | Pemeriksaan tipe |
 | `npm run lint` / `lint:fix` | ESLint |
+
+Seluruh skrip uji menuruti `SMOKE_BASE`, jadi suite yang sama bisa diarahkan ke **hasil
+build**, bukan hanya ke server dev:
+
+```bash
+npm run build
+# jalankan hasil build (BETTER_AUTH_URL & APP_URL harus sama dengan origin yang dipakai)
+PORT=3100 NODE_ENV=production APP_URL=http://127.0.0.1:3100 \
+  BETTER_AUTH_URL=http://127.0.0.1:3100 node .output/server/index.mjs
+
+SMOKE_BASE=http://127.0.0.1:3100 npm run smoke:api
+SMOKE_BASE=http://127.0.0.1:3100 npm run ux-audit
+```
+
+Origin wajib cocok: Better Auth menolak permintaan dari origin di luar `BETTER_AUTH_URL`
+dengan `INVALID_ORIGIN` — bukan cacat build, melainkan penjaga CSRF yang memang bekerja.
+
+Pada Git Bash (Windows), jalankan dengan `MSYS_NO_PATHCONV=1`: tanpa itu nilai env yang
+diawali garis miring (mis. `STORAGE_PUBLIC_BASE=/media`) diubah menjadi path Windows dan
+URL berkas media jadi salah.
 
 ---
 

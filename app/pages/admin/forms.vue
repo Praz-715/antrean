@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { apiFetch } from '../../composables/useApi'
-import { PERMISSIONS } from '../../../shared/constants/permissions'
-import { SELECT_NONE, nullableValue } from '../../../shared/constants/ui'
+import { PERMISSIONS } from '#shared/constants/permissions'
+import { SELECT_NONE, nullableValue } from '#shared/constants/ui'
 
 definePageMeta({ layout: 'admin', middleware: 'admin' })
 useHead({ title: 'Form Builder' })

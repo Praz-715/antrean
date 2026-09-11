@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { apiFetch } from '../../composables/useApi'
-import { filterValue, SELECT_ALL } from '../../../shared/constants/ui'
-import { addDays, todayInTimezone } from '../../../shared/utils/service-date'
+import { filterValue, SELECT_ALL } from '#shared/constants/ui'
+import { addDays, todayInTimezone } from '#shared/utils/service-date'
 import type { EChartsOption } from 'echarts'
 
 definePageMeta({ layout: 'admin', middleware: 'admin' })

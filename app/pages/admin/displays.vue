@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { apiFetch } from '../../composables/useApi'
-import { nullableValue, SELECT_NONE } from '../../../shared/constants/ui'
-import { PERMISSIONS } from '../../../shared/constants/permissions'
+import { nullableValue, SELECT_NONE } from '#shared/constants/ui'
+import { PERMISSIONS } from '#shared/constants/permissions'
 
 definePageMeta({ layout: 'admin', middleware: 'admin' })
 useHead({ title: 'Perangkat Display' })

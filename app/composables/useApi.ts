@@ -1,5 +1,5 @@
 import type { FetchOptions } from 'ofetch'
-import type { ApiResponse } from '../../shared/types/api'
+import type { ApiResponse } from '#shared/types/api'
 import { beginApiCall, endApiCall } from './useApiLoading'
 
 export class ApiError extends Error {

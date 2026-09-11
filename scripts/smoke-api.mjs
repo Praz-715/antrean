@@ -2,7 +2,8 @@
  * Sapu seluruh endpoint tulis untuk menemukan jalur yang belum pernah dieksekusi.
  * Jalankan: node audit-endpoints.mjs
  */
-const BASE = 'http://localhost:3000'
+/** Alamat server yang diuji; timpa dengan SMOKE_BASE untuk menguji hasil build. */
+const BASE = process.env.SMOKE_BASE || 'http://localhost:3000'
 let cookie = ''
 const results = []
 

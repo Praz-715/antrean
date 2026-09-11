@@ -1,12 +1,12 @@
 <script setup lang="ts">
-import { PERMISSIONS } from '../../../shared/constants/permissions'
+import { PERMISSIONS } from '#shared/constants/permissions'
 import {
   SETTINGS_CATALOG,
   SETTING_GROUPS,
   type SettingDefinition,
   type SettingValue,
   type SettingsMap,
-} from '../../../shared/constants/settings'
+} from '#shared/constants/settings'
 
 definePageMeta({ layout: 'admin', middleware: 'admin' })
 useHead({ title: 'Pengaturan' })

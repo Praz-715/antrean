@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { apiFetch } from '../../composables/useApi'
-import { filterValue, SELECT_ALL } from '../../../shared/constants/ui'
+import { filterValue, SELECT_ALL } from '#shared/constants/ui'
 
 definePageMeta({ layout: 'admin', middleware: 'admin' })
 useHead({ title: 'Audit Log' })

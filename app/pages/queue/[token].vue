@@ -1,8 +1,8 @@
 <script setup lang="ts">
 import { apiFetch } from '../../composables/useApi'
-import { QUEUE_STATUS_LABEL } from '../../../shared/utils/queue-format'
-import { SOCKET_EVENTS } from '../../../shared/constants/socket'
-import type { TicketPayload } from '../../../shared/utils/ticket'
+import { QUEUE_STATUS_LABEL } from '#shared/utils/queue-format'
+import { SOCKET_EVENTS } from '#shared/constants/socket'
+import type { TicketPayload } from '#shared/utils/ticket'
 
 definePageMeta({ layout: 'public' })
 

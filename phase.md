@@ -123,7 +123,27 @@ Diukur pada `npm run dev` — bukan build produksi, jadi angkanya batas bawah:
     dan nomor identitas, jadi layar tidak boleh menerima semuanya hanya karena widget-nya ada.
     Label field disalin ke dalam konfigurasi widget saat dipilih, sehingga layar tidak perlu
     memuat definisi formulir dan tampilannya tidak berubah sendiri saat formulir disunting.
-17. **Label waktu relatif memakai `useNow()`.** `Date.now()` di dalam render membuat SSR dan
+17. **Kode app mengimpor folder `shared/` lewat alias `#shared`, bukan jalur relatif.**
+    Ditemukan saat `npm run build` pertama kali dijalankan: akar Vite sisi app adalah
+    `app/`, jadi impor relatif yang keluar dari akar itu ditandai EXTERNAL dan ditulis
+    sebagai `../shared/constants/permissions.ts` ke dalam chunk — Nitro lalu berhenti
+    dengan `UNRESOLVED_IMPORT`. Dev tidak pernah memperlihatkannya karena resolusi
+    berjalan di Vite, bukan lewat bundel Nitro. 65 impor pada 35 berkas diubah.
+18. **Runtime Prisma tidak dibundel & satu barisnya ditambal saat build.** Klien hasil
+    generate dibuka dengan `globalThis['__dirname'] = path.dirname(fileURLToPath(import.meta.url))`.
+    Di dalam bundel, `import.meta.url` menjadi shim yang pada chunk bernilai
+    `file:///_entry.js` — bukan path absolut di Windows, sehingga server hasil build mati
+    sebelum melayani satu permintaan pun. `__dirname` itu sendiri tidak terpakai karena
+    koneksi memakai driver adapter, jadi nilainya diganti `process.cwd()` lewat plugin
+    rollup kecil di `nuxt.config.ts`.
+19. **Ikatan label ⇄ input bisa putus HANYA di hasil build.** Pada halaman yang bagian
+    formulirnya dirender server lalu dipasang ulang di klien, `useId()` menghasilkan id
+    berbeda (`for="v-0-38-4"` vs `id="v-0-0-4"`). Yang paling terasa kolom tanggal:
+    tanpa ikatan itu ia kehilangan nama yang bisa dibacakan pembaca layar. Kolom tanggal
+    pada Laporan, Pengunjung, dan Rating kini punya `aria-label` sendiri — nama yang tidak
+    bergantung pada id mana pun. Ditemukan oleh `ux-audit` yang dijalankan terhadap hasil
+    build (`SMOKE_BASE`), bukan terhadap server dev.
+20. **Label waktu relatif memakai `useNow()`.** `Date.now()` di dalam render membuat SSR dan
     hidrasi menghasilkan teks berbeda — Vue melaporkannya sebagai mismatch dan membuang DOM
     yang sudah dirender.
 

@@ -1,3 +1,37 @@
+/**
+ * Klien Prisma hasil generate dibuka dengan baris:
+ *
+ *   globalThis['__dirname'] = path.dirname(fileURLToPath(import.meta.url))
+ *
+ * Di dalam bundel Nitro, `import.meta.url` diganti shim `globalThis._importMeta_`,
+ * dan pada chunk yang dievaluasi sebelum entri nilainya jatuh ke `file:///_entry.js`.
+ * Di Windows URL itu bukan path absolut, jadi `fileURLToPath` melempar
+ * `ERR_INVALID_FILE_URL_PATH` dan server hasil build mati sebelum melayani satu
+ * permintaan pun (di Linux lolos hanya karena `/_entry.js` masih terbaca absolut).
+ *
+ * `__dirname` sendiri tidak dipakai: koneksi database memakai driver adapter
+ * (`@prisma/adapter-mariadb`), bukan berkas query engine yang perlu dicari di disk.
+ * Jadi nilainya cukup diisi direktori kerja proses.
+ *
+ * Kalau baris itu hilang pada versi Prisma berikutnya, modulnya dibiarkan apa adanya —
+ * lebih baik gagal terang-terangan daripada menambal sesuatu yang sudah berubah.
+ */
+function prismaDirnamePatch() {
+  const pattern = /globalThis\[(['"])__dirname\1\]\s*=\s*[\w$]+\.dirname\(\s*fileURLToPath\(\s*import\.meta\.url\s*\)\s*\)/
+
+  return {
+    name: 'antrean-prisma-dirname',
+    transform(code: string, id: string) {
+      if (!id.replace(/\\/g, '/').includes('/generated/prisma/')) return null
+      if (!pattern.test(code)) return null
+      return {
+        code: code.replace(pattern, 'globalThis[\'__dirname\'] = globalThis[\'__dirname\'] ?? process.cwd()'),
+        map: null,
+      }
+    },
+  }
+}
+
 export default defineNuxtConfig({
   compatibilityDate: '2025-07-15',
   devtools: { enabled: true },
@@ -46,6 +80,20 @@ export default defineNuxtConfig({
   nitro: {
     // Socket.IO di-bind ke instance Nitro lewat server/plugins/socket.ts
     experimental: { websocket: true },
+
+    /**
+     * Runtime Prisma tidak ikut dibundel — dibiarkan sebagai dependensi
+     * node_modules biasa (Nitro menyalinnya ke `.output/server/node_modules`).
+     * Selain memperkecil chunk, ini menjauhkan kode yang bergantung pada
+     * `import.meta.url` dari shim bundler.
+     */
+    externals: {
+      external: ['@prisma/client', '@prisma/adapter-mariadb'],
+    },
+
+    rollupConfig: {
+      plugins: [prismaDirnamePatch()],
+    },
   },
 
   experimental: {

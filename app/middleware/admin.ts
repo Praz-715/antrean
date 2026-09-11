@@ -1,4 +1,4 @@
-import { PERMISSIONS } from '../../shared/constants/permissions'
+import { PERMISSIONS } from '#shared/constants/permissions'
 
 /** Area /admin: butuh minimal satu izin baca dashboard/event. Operator murni ditolak. */
 export default defineNuxtRouteMiddleware(async (to) => {

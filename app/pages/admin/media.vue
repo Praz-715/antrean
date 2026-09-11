@@ -1,8 +1,8 @@
 <script setup lang="ts">
 import { apiFetch } from '../../composables/useApi'
-import { filterValue, SELECT_ALL } from '../../../shared/constants/ui'
+import { filterValue, SELECT_ALL } from '#shared/constants/ui'
 import type { ApiError } from '../../composables/useApi'
-import { PERMISSIONS } from '../../../shared/constants/permissions'
+import { PERMISSIONS } from '#shared/constants/permissions'
 
 definePageMeta({ layout: 'admin', middleware: 'admin' })
 useHead({ title: 'Media Library' })

@@ -7,7 +7,8 @@
 import { chromium } from 'playwright'
 import { deflateSync } from 'node:zlib'
 
-const BASE = 'http://localhost:3000'
+/** Alamat server yang diuji; timpa dengan SMOKE_BASE untuk menguji hasil build. */
+const BASE = process.env.SMOKE_BASE || 'http://localhost:3000'
 const results = []
 
 function record(name, ok, detail) {

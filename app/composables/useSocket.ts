@@ -1,5 +1,5 @@
 import { io, type Socket } from 'socket.io-client'
-import { SOCKET_PATH } from '../../shared/constants/socket'
+import { SOCKET_PATH } from '#shared/constants/socket'
 
 export interface SocketAuth {
   role: 'admin' | 'operator' | 'display' | 'visitor'

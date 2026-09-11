@@ -1,5 +1,5 @@
-import type { ApiResponse } from '../../shared/types/api'
-import type { Permission } from '../../shared/constants/permissions'
+import type { ApiResponse } from '#shared/types/api'
+import type { Permission } from '#shared/constants/permissions'
 
 export interface MeAssignment {
   id: string

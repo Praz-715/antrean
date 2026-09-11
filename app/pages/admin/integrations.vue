@@ -1,12 +1,12 @@
 <script setup lang="ts">
 import { apiFetch } from '../../composables/useApi'
-import { PERMISSIONS } from '../../../shared/constants/permissions'
+import { PERMISSIONS } from '#shared/constants/permissions'
 import {
   DATA_SOURCE_AUTH_TYPES,
   HTTP_METHODS,
   IMPLEMENTED_DATA_SOURCE_TYPES,
   TRANSFORMS,
-} from '../../../shared/schemas/data-source'
+} from '#shared/schemas/data-source'
 
 definePageMeta({ layout: 'admin', middleware: 'admin' })
 useHead({ title: 'Integrasi' })

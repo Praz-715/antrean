@@ -1,4 +1,4 @@
-import { readableColor } from '../../shared/utils/color'
+import { readableColor } from '#shared/utils/color'
 
 /**
  * Warna jenis antrean yang aman dipakai sebagai warna teks pada tema apa pun.

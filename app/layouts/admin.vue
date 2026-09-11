@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { signOut } from '../utils/auth-client'
-import { PERMISSIONS } from '../../shared/constants/permissions'
+import { PERMISSIONS } from '#shared/constants/permissions'
 
 const { me, can, reset } = useMe()
 const route = useRoute()

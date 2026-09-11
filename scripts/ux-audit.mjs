@@ -13,7 +13,8 @@
  */
 import { chromium } from 'playwright'
 
-const BASE = 'http://localhost:3000'
+/** Alamat server yang diuji; timpa dengan SMOKE_BASE untuk menguji hasil build. */
+const BASE = process.env.SMOKE_BASE || 'http://localhost:3000'
 const findings = []
 const passes = []
 
