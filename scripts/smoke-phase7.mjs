@@ -427,6 +427,11 @@ async function main() {
         }
       }
     await api('DELETE', `/api/admin/events/${eventId}`).catch(() => {})
+    /**
+     * Operator uji ikut dihapus. Menghapus event saja tidak cukup — akunnya tetap
+     * berdiri dan menumpuk di halaman Pengguna sebagai "Operator Uji" palsu.
+     */
+    await api('DELETE', `/api/admin/users/${operator.id}`).catch(() => {})
     stub.close()
   }
 

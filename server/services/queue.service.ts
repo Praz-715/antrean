@@ -340,7 +340,17 @@ export const queueService = {
    * Papan ini dibaca setiap display pada tiap event antrean sekaligus polling
    * cadangan, jadi biayanya tidak boleh tumbuh mengikuti jumlah layanan.
    */
-  async publicBoard(eventId: string) {
+  /**
+   * Papan antrean untuk layar & halaman publik.
+   *
+   * `visitorFieldKeys` menentukan isian formulir mana yang ikut dikirim untuk
+   * antrean yang sedang dipanggil (§18, §19). Daftarnya berasal dari widget pada
+   * template display, jadi layar HANYA menerima field yang memang dipasang admin —
+   * data pengunjung bisa memuat nomor HP atau nomor identitas, dan tidak ada alasan
+   * mengirimkan semuanya ke sebuah TV di ruang tunggu.
+   */
+  async publicBoard(eventId: string, options?: { visitorFieldKeys?: string[] }) {
+    const visitorFieldKeys = [...new Set(options?.visitorFieldKeys ?? [])]
     const event = await prisma.event.findFirst({
       where: { id: eventId, deletedAt: null },
       select: { id: true, name: true, timezone: true, status: true },
@@ -350,14 +360,45 @@ export const queueService = {
     const serviceDate = resolveServiceDate(event.timezone)
     const serviceDateStr = formatServiceDate(serviceDate)
 
-    const queueTypes = await prisma.queueType.findMany({
-      where: { eventId, isActive: true, deletedAt: null },
-      orderBy: { displayOrder: 'asc' },
-      select: { id: true, code: true, name: true, color: true, icon: true },
-    })
+    /**
+     * Loket ikut diambil karena layar bisa menampilkan papan PER LOKET (§19):
+     * satu jenis antrean sering dilayani 2–4 loket sekaligus, dan pengunjung perlu
+     * tahu nomor mana yang sedang dipanggil di loket mana.
+     */
+    const [queueTypes, counters] = await Promise.all([
+      prisma.queueType.findMany({
+        where: { eventId, isActive: true, deletedAt: null },
+        orderBy: { displayOrder: 'asc' },
+        select: { id: true, code: true, name: true, color: true, icon: true },
+      }),
+      prisma.counter.findMany({
+        where: { eventId, isActive: true },
+        orderBy: [{ displayOrder: 'asc' }, { code: 'asc' }],
+        select: {
+          id: true,
+          code: true,
+          name: true,
+          services: {
+            orderBy: { displayOrder: 'asc' },
+            select: { queueType: { select: { id: true, code: true, name: true, color: true } } },
+          },
+        },
+      }),
+    ])
 
     if (!queueTypes.length) {
-      return { event, serviceDate: serviceDateStr, board: [] }
+      return {
+        event,
+        serviceDate: serviceDateStr,
+        board: [],
+        counters: counters.map(c => ({
+          id: c.id,
+          code: c.code,
+          name: c.name,
+          services: c.services.map(row => row.queueType),
+          current: null,
+        })),
+      }
     }
 
     const scope = { eventId, serviceDate, deletedAt: null }
@@ -380,7 +421,9 @@ export const queueService = {
           recallCount: true,
           priority: true,
           lastCalledAt: true,
+          counterId: true,
           counter: { select: { code: true, name: true } },
+          visitorId: true,
         },
       }),
       // lima nomor menunggu berikutnya untuk SETIAP layanan dalam satu query
@@ -418,6 +461,54 @@ export const queueService = {
       if (!currentByType.has(row.queueTypeId)) currentByType.set(row.queueTypeId, row)
     }
 
+    /**
+     * Isian formulir pengunjung untuk antrean yang sedang dipanggil.
+     *
+     * Diambil dari snapshot `visitors.data` — satu query untuk semua antrean aktif,
+     * dan isinya mengikuti formulir saat pengunjung mendaftar (bukan formulir versi
+     * sekarang). Hanya kunci yang diminta yang diteruskan.
+     */
+    const fieldsByQueue = new Map<string, Record<string, string>>()
+    if (visitorFieldKeys.length) {
+      const visitorIds = [...new Set(active.map(row => row.visitorId).filter((id): id is string => !!id))]
+      if (visitorIds.length) {
+        const visitors = await prisma.visitor.findMany({
+          where: { id: { in: visitorIds } },
+          select: { id: true, fullName: true, data: true },
+        })
+
+        const byVisitor = new Map(visitors.map(v => [v.id, v]))
+        for (const row of active) {
+          if (!row.visitorId) continue
+          const visitor = byVisitor.get(row.visitorId)
+          if (!visitor) continue
+
+          const data = (visitor.data ?? {}) as Record<string, unknown>
+          const picked: Record<string, string> = {}
+          for (const key of visitorFieldKeys) {
+            const raw = data[key]
+            const text = Array.isArray(raw) ? raw.join(', ') : raw == null ? '' : String(raw)
+            if (text.trim()) picked[key] = text.trim()
+          }
+          if (Object.keys(picked).length) fieldsByQueue.set(row.queueNumber, picked)
+        }
+      }
+    }
+
+    /**
+     * Nomor yang sedang dipegang TIAP loket.
+     *
+     * Barisnya sudah urut dari panggilan terbaru, jadi yang pertama ditemui untuk
+     * sebuah loket adalah yang sedang berjalan di sana. Antrean yang dipanggil tanpa
+     * loket (pengawas lintas layanan, §57.6) sengaja dilewati — tidak ada kotak
+     * loket yang bisa mewakilinya.
+     */
+    const currentByCounter = new Map<string, (typeof active)[number]>()
+    for (const row of active) {
+      if (!row.counterId) continue
+      if (!currentByCounter.has(row.counterId)) currentByCounter.set(row.counterId, row)
+    }
+
     const nextByType = new Map<string, string[]>()
     for (const row of waitingRows) {
       const list = nextByType.get(row.queue_type_id) ?? []
@@ -439,6 +530,8 @@ export const queueService = {
               priority: current.priority,
               lastCalledAt: current.lastCalledAt,
               counter: current.counter,
+              /** Isian formulir pengunjung — hanya field yang diminta pemanggil. */
+              fields: fieldsByQueue.get(current.queueNumber) ?? {},
             }
           : null,
         waitingCount: waitingCountByType.get(qt.id) ?? 0,
@@ -447,6 +540,30 @@ export const queueService = {
       }
     })
 
-    return { event, serviceDate: serviceDateStr, board }
+    const queueTypeById = new Map(queueTypes.map(qt => [qt.id, qt]))
+
+    const counterBoard = counters.map((counter) => {
+      const current = currentByCounter.get(counter.id)
+      const queueType = current ? queueTypeById.get(current.queueTypeId) ?? null : null
+      return {
+        id: counter.id,
+        code: counter.code,
+        name: counter.name,
+        /** Layanan yang dilayani loket ini — dipakai layar untuk menyaring kotaknya. */
+        services: counter.services.map(row => row.queueType),
+        current: current
+          ? {
+              queueNumber: current.queueNumber,
+              status: current.status,
+              priority: current.priority,
+              lastCalledAt: current.lastCalledAt,
+              queueType: queueType ? { id: queueType.id, code: queueType.code, name: queueType.name, color: queueType.color } : null,
+              fields: fieldsByQueue.get(current.queueNumber) ?? {},
+            }
+          : null,
+      }
+    })
+
+    return { event, serviceDate: serviceDateStr, board, counters: counterBoard }
   },
 }

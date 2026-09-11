@@ -164,7 +164,7 @@ Tidak ada query Prisma di dalam handler, tidak ada business logic di dalam `.vue
 | `/admin/operators`, `/admin/assignments` | Pengguna & penugasan |
 | `/admin/public-pages`, `/admin/forms` | Publikasi & form builder |
 | `/admin/displays`, `/admin/announcements` | Perangkat display & teks berjalan |
-| `/admin/media`, `/admin/display-builder` | Media library, playlist & penyusun tata letak layar |
+| `/admin/media`, `/admin/display-builder` | Media library, playlist & penyusun tata letak layar (termasuk widget **Nomor per Loket** & **Data Pengunjung**) |
 | `/admin/analytics`, `/admin/reports`, `/admin/audit-logs` | Grafik, laporan harian, pusat ekspor & jejak audit |
 | `/admin/visitors`, `/admin/feedback` | Data pengunjung & moderasi rating/testimoni |
 | `/admin/integrations`, `/admin/settings`, `/admin/roles` | Sumber data eksternal, pengaturan sistem, role & izin |

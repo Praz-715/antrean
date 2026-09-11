@@ -92,6 +92,21 @@ interface TemplateWidget {
   playlistId: string | null
 }
 
+/** Satu loket pada papan display, beserta nomor yang sedang dilayaninya. */
+interface CounterBoardEntry {
+  id: string
+  code: string
+  name: string
+  services: Array<{ id: string, code: string, name: string, color: string }>
+  current: {
+    queueNumber: string
+    status: string
+    priority: number
+    lastCalledAt: string | null
+    queueType: { id: string, code: string, name: string, color: string } | null
+  } | null
+}
+
 interface DisplayState {
   device: { id: string, deviceCode: string, name: string, type: string, queueType: { id: string, code: string, name: string, color: string } | null, isPaired: boolean }
   event: { id: string, name: string, timezone: string, status: string }
@@ -101,6 +116,7 @@ interface DisplayState {
   settings: { voiceEnabled: boolean, voiceLanguage: string }
   openState: { isOpen: boolean, message: string, openTime: string | null, closeTime: string | null }
   board: BoardEntry[]
+  counters: CounterBoardEntry[]
   announcements: Array<{ id: string, title: string | null, message: string, type: string }>
   template: { id: string, name: string, background: { color?: string, imageUrl?: string } | null, widgets: TemplateWidget[] } | null
   mediaById: Record<string, { url: string, type: string }>
@@ -302,6 +318,7 @@ function lastUpdateText() {
         :widgets="state.template!.widgets as never"
         :background="state.template!.background"
         :board="state.board as never"
+        :counters="state.counters as never"
         :organization-name="state.organization?.name ?? state.event.name"
         :announcements="state.announcements"
         :media-by-id="state.mediaById"

@@ -75,12 +75,44 @@ async function loadAssets() {
 }
 await loadAssets()
 
+/** Field formulir milik event yang sedang dibuka, tanpa duplikat kunci. */
+const formFieldOptions = computed(() => {
+  const seen = new Set<string>()
+  const items: Array<{ label: string, value: string }> = []
+  for (const form of forms.value) {
+    for (const field of form.fields ?? []) {
+      if (seen.has(field.key)) continue
+      seen.add(field.key)
+      items.push({ label: `${field.label} · ${field.key}`, value: field.key })
+    }
+  }
+  return items
+})
+
+/** Label field menurut Form Builder; jadi cadangan bila hanya kuncinya diketahui. */
+function fieldLabelOf(key: string) {
+  for (const form of forms.value) {
+    const field = (form.fields ?? []).find(f => f.key === key)
+    if (field) return field.label
+  }
+  return key
+}
+
 const mediaById = computed(() =>
   Object.fromEntries(mediaList.value.map(m => [m.id, { url: m.url, type: m.type }])))
 const playlistById = computed(() =>
   Object.fromEntries(playlistList.value.map(p => [p.id, { items: p.items }])))
 
 const queueTypes = ref<Array<{ id: string, code: string, name: string }>>([])
+
+/**
+ * Formulir event beserta field-nya (Form Builder, §18).
+ *
+ * Dipakai widget "Data Pengunjung": admin memilih isian mana yang boleh tampil di
+ * layar, dan pilihannya disimpan berikut labelnya sehingga layar tidak perlu memuat
+ * definisi formulir.
+ */
+const forms = ref<Array<{ id: string, name: string, fields: Array<{ id: string, key: string, label: string, type: string }> }>>([])
 
 /**
  * Kedua permintaan sengaja DIMULAI bersamaan, bukan berurutan.
@@ -92,11 +124,18 @@ const queueTypes = ref<Array<{ id: string, code: string, name: string }>>([])
  */
 watch(currentId, async () => {
   if (!currentId.value) return
-  const [types] = await Promise.all([
+  const [types, formList] = await Promise.all([
     apiFetch<Array<{ id: string, code: string, name: string }>>('/api/admin/queue-types', { query: { eventId: currentId.value } }),
+    /**
+     * Formulir hanya untuk mengisi panel properti; bila akunnya tidak punya izin
+     * `form.view`, widget "Data Pengunjung" tetap bisa dipakai — hanya daftar
+     * pilihannya kosong, bukan halamannya gagal terbuka.
+     */
+    apiFetch<typeof forms.value>('/api/admin/forms', { query: { eventId: currentId.value } }).catch(() => []),
     loadTemplates(),
   ])
   queueTypes.value = types
+  forms.value = formList
 }, { immediate: true })
 
 // ---- riwayat undo/redo ----
@@ -450,7 +489,14 @@ const playlistOptions = computed(() => [
   ...playlistList.value.map(p => ({ label: p.name, value: p.id })),
 ])
 const queueTypeOptions = computed(() => [
-  { label: 'Layanan pertama', value: SELECT_NONE },
+  /**
+   * Arti "tidak dipilih" berbeda per widget: papan loket menampilkan SELURUH loket
+   * event, sedangkan widget lain jatuh ke layanan pertama.
+   */
+  {
+    label: selected.value?.type === 'COUNTER_BOARD' ? 'Semua loket event' : 'Layanan pertama',
+    value: SELECT_NONE,
+  },
   ...queueTypes.value.map(q => ({ label: `${q.code} · ${q.name}`, value: q.id })),
 ])
 
@@ -481,6 +527,22 @@ const selectedQueueTypeId = nullableProxy(
   () => (selected.value?.config.queueTypeId as string | undefined) ?? null,
   (value) => { if (selected.value) selected.value.config.queueTypeId = value ?? undefined },
 )
+/**
+ * Pilihan isian formulir pada widget "Data Pengunjung".
+ *
+ * Yang tersimpan bukan hanya kuncinya, tetapi juga labelnya — layar memakai label
+ * itu apa adanya, jadi mengubah nama field di Form Builder tidak mengubah tampilan
+ * layar yang sudah berjalan sampai admin memilihnya lagi.
+ */
+const selectedFieldKeys = computed({
+  get: () => ((selected.value?.config.fields as Array<{ key: string }> | undefined) ?? []).map(f => f.key),
+  set: (keys: string[]) => {
+    if (!selected.value) return
+    selected.value.config.fields = keys.map(key => ({ key, label: fieldLabelOf(key) }))
+    onPropertyChange()
+  },
+})
+
 const backgroundImage = computed({
   get: () => background.value.imageUrl ?? SELECT_NONE,
   set: (value: string) => { background.value.imageUrl = nullableValue(value) ?? undefined },
@@ -796,6 +858,63 @@ const layers = computed(() =>
               <UFormField v-if="selected.type === 'QUEUE_LIST'" label="Jumlah Nomor" size="xs">
                 <UInputNumber v-model="selected.config.limit as number" :min="1" :max="10" class="w-full" size="sm" />
               </UFormField>
+
+              <template v-if="WIDGET_META[selected.type].needsFormFields">
+                <UFormField
+                  label="Isian dari Form Builder"
+                  :help="formFieldOptions.length
+                    ? 'Hanya isian yang dipilih di sini yang dikirim ke layar.'
+                    : 'Event ini belum punya formulir — buat dulu di Form Builder.'"
+                  size="xs"
+                >
+                  <USelectMenu
+                    v-model="selectedFieldKeys"
+                    :items="formFieldOptions"
+                    value-key="value"
+                    multiple
+                    :disabled="!formFieldOptions.length"
+                    placeholder="Pilih isian formulir"
+                    class="w-full"
+                    size="sm"
+                  />
+                </UFormField>
+                <UCheckbox
+                  :model-value="selected.config.showQueueNumber !== false"
+                  label="Tampilkan nomor antrean"
+                  size="sm"
+                  @update:model-value="(v) => { selected!.config.showQueueNumber = v === true; onPropertyChange() }"
+                />
+                <UCheckbox
+                  :model-value="selected.config.showLabel !== false"
+                  label="Tampilkan label isian"
+                  size="sm"
+                  @update:model-value="(v) => { selected!.config.showLabel = v === true; onPropertyChange() }"
+                />
+                <UCheckbox
+                  :model-value="selected.config.mask === true"
+                  label="Samarkan sebagian isian"
+                  size="sm"
+                  @update:model-value="(v) => { selected!.config.mask = v === true; onPropertyChange() }"
+                />
+              </template>
+
+              <template v-if="selected.type === 'COUNTER_BOARD'">
+                <UFormField label="Kolom" help="0 = mengikuti jumlah loket" size="xs">
+                  <UInputNumber v-model="selected.config.columns as number" :min="0" :max="6" class="w-full" size="sm" />
+                </UFormField>
+                <UCheckbox
+                  :model-value="selected.config.showEmpty !== false"
+                  label="Tampilkan loket yang belum memanggil"
+                  size="sm"
+                  @update:model-value="(v) => { selected!.config.showEmpty = v === true; onPropertyChange() }"
+                />
+                <UCheckbox
+                  :model-value="selected.config.showService !== false"
+                  label="Tampilkan nama layanan di tiap loket"
+                  size="sm"
+                  @update:model-value="(v) => { selected!.config.showService = v === true; onPropertyChange() }"
+                />
+              </template>
 
               <UFormField v-if="WIDGET_META[selected.type].needsMedia" label="Media" size="xs">
                 <USelect v-model="selectedMediaId" :items="mediaOptions" class="w-full" size="sm" />

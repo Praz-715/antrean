@@ -114,7 +114,16 @@ Diukur pada `npm run dev` — bukan build produksi, jadi angkanya batas bawah:
     dua cacat: `--ui-primary` bernilai sama untuk kedua tema — sehingga teks tombol
     utama di tema gelap hanya 3,3:1 — dan beberapa lencana masih memakai warna
     layanan mentah tanpa `useReadableColor()`.
-16. **Label waktu relatif memakai `useNow()`.** `Date.now()` di dalam render membuat SSR dan
+16. **Layar bisa menampilkan data per loket dan isian formulir pengunjung** (§18, §19).
+    Diminta pengguna: satu layanan sering dipegang 2–4 loket, dan papan "nomor dilayani" per
+    layanan tidak menjawab "nomor mana di loket mana". Ditambah dua widget — `COUNTER_BOARD`
+    (satu kotak per loket) dan `VISITOR_INFO` (nomor + isian formulir, mis. nama). Konsekuensi
+    yang disengaja: `GET /api/display/{code}/state` menghitung kunci field dari widget pada
+    template, dan HANYA kunci itu yang dikirim ke perangkat — data pengunjung memuat nomor HP
+    dan nomor identitas, jadi layar tidak boleh menerima semuanya hanya karena widget-nya ada.
+    Label field disalin ke dalam konfigurasi widget saat dipilih, sehingga layar tidak perlu
+    memuat definisi formulir dan tampilannya tidak berubah sendiri saat formulir disunting.
+17. **Label waktu relatif memakai `useNow()`.** `Date.now()` di dalam render membuat SSR dan
     hidrasi menghasilkan teks berbeda — Vue melaporkannya sebagai mismatch dan membuang DOM
     yang sudah dirender.
 

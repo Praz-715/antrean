@@ -89,6 +89,27 @@ async function main() {
   await login('superadmin@antrean.local')
 
   const stamp = Date.now()
+  /** Pengguna uji yang dibuat skrip ini — dihapus lagi saat bersih-bersih. */
+  const createdUserIds = []
+  /**
+   * Media & playlist uji ikut dicatat.
+   *
+   * Media library dipakai admin lewat beberapa pilihan (logo halaman publik, widget
+   * display), jadi berkas uji yang tertinggal langsung terlihat sebagai pilihan palsu
+   * bernama "Logo Uji …". Menghapus event tidak membersihkannya — media milik
+   * organisasi, bukan event.
+   */
+  const createdMediaIds = []
+  const createdPlaylistIds = []
+  /**
+   * Perangkat & template uji juga dicatat.
+   *
+   * Keduanya milik event, tetapi menghapus event TIDAK menghapusnya (event hanya
+   * ditandai terhapus), dan selama perangkat masih memakai template, media di
+   * dalamnya pun tidak bisa dihapus — sisa uji jadi menumpuk berantai.
+   */
+  const createdDeviceIds = []
+  const createdTemplateIds = []
   const eventId = (await api('POST', '/api/admin/events', { name: `Uji Phase5 ${stamp}`, timezone: 'Asia/Jakarta' })).data.id
   await api('PUT', `/api/admin/events/${eventId}/schedules`, {
     schedules: Array.from({ length: 7 }, (_, d) => ({ dayOfWeek: d, openTime: '00:00', closeTime: '23:59', isClosed: false })),
@@ -108,6 +129,7 @@ async function main() {
     record('unggah gambar tervalidasi magic byte', !!upload.success,
       upload.success ? `${upload.data.width}×${upload.data.height}, ${upload.data.sizeBytes} byte` : upload.message)
     const media = upload.data
+    if (media?.id) createdMediaIds.push(media.id)
 
     // ---- 2. tolak berkas palsu ----
     const fake = new FormData()
@@ -122,6 +144,7 @@ async function main() {
 
     // ---- 4. playlist ----
     const playlist = (await api('POST', '/api/admin/playlists', { name: `Playlist Uji ${stamp}` })).data
+    createdPlaylistIds.push(playlist.id)
     const withItems = await api('PUT', `/api/admin/playlists/${playlist.id}/items`, {
       items: [{ mediaId: media.id, durationSeconds: 5 }],
     })
@@ -136,6 +159,7 @@ async function main() {
     const template = (await api('POST', '/api/admin/display-templates', {
       name: `Template Uji ${stamp}`, type: 'GLOBAL', eventId,
     })).data
+    createdTemplateIds.push(template.id)
     const saved = await api('PUT', `/api/admin/display-templates/${template.id}/widgets`, {
       widgets: [
         {
@@ -149,23 +173,31 @@ async function main() {
           mediaId: media.id, style: { objectFit: 'contain' }, isVisible: true,
         },
         {
+          // Papan per loket: satu kotak untuk tiap loket yang melayani layanan ini.
+          type: 'COUNTER_BOARD', x: 60, y: 720, width: 1800, height: 230, zIndex: 4,
+          config: { queueTypeId: queueType.id, columns: 0, showEmpty: true, showService: false },
+          style: { color: '#ffffff', backgroundColor: '#0f172a', fontSize: 72, align: 'center', radius: 24 },
+          isVisible: true,
+        },
+        {
           type: 'RUNNING_TEXT', x: 0, y: 980, width: 1920, height: 90, zIndex: 3,
           config: { text: 'Selamat datang' }, style: { color: '#e2e8f0', backgroundColor: '#1e293b', fontSize: 34, align: 'left' },
           isVisible: true,
         },
       ],
     })
-    record('template menyimpan tata letak widget', !!saved.success && saved.data.widgets.length === 3,
+    record('template menyimpan tata letak widget', !!saved.success && saved.data.widgets.length === 4,
       saved.success ? `${saved.data.widgets.length} widget` : saved.message)
 
     // ---- 7. duplikasi template ----
     const copy = await api('POST', `/api/admin/display-templates/${template.id}/duplicate`)
-    record('template bisa diduplikasi beserta widget', !!copy.success && copy.data.widgets.length === 3,
+    record('template bisa diduplikasi beserta widget', !!copy.success && copy.data.widgets.length === 4,
       copy.success ? copy.data.name : copy.message)
     if (copy.success) await api('DELETE', `/api/admin/display-templates/${copy.data.id}`)
 
     // ---- 8. pasang ke perangkat & render di layar ----
     const device = (await api('POST', '/api/admin/displays', { eventId, name: 'Display Phase5', type: 'GLOBAL' })).data
+    createdDeviceIds.push(device.id)
     await api('PATCH', `/api/admin/displays/${device.id}`, { templateId: template.id })
 
     const state = await api('GET', `/api/display/${device.deviceCode}/state`)
@@ -178,30 +210,56 @@ async function main() {
       eventId, title: 'Phase5', allowedQueueTypeIds: [], maxPerIpPerDay: 0, requireCaptcha: false,
     })).data
     await api('POST', `/api/admin/public-pages/${publicPage.id}/publish`, { isPublished: true })
-    await fetch(`${BASE}/api/public/${publicPage.publishCode}/queue`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json', Origin: BASE },
-      body: JSON.stringify({ queueTypeId: queueType.id, values: {} }),
-    })
+    // Dua nomor: satu untuk tiap loket, supaya papan per loket benar-benar teruji.
+    for (let i = 0; i < 2; i++) {
+      await fetch(`${BASE}/api/public/${publicPage.publishCode}/queue`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', Origin: BASE },
+        body: JSON.stringify({ queueTypeId: queueType.id, values: {} }),
+      })
+    }
 
+    /**
+     * DUA loket melayani layanan yang sama — inilah keadaan yang ingin ditampilkan
+     * papan per loket: satu layanan dipegang beberapa loket sekaligus (§12, §19).
+     */
     const counter = (await api('POST', '/api/admin/counters', { eventId, code: 'PL1', name: 'Loket Phase5', isActive: true, displayOrder: 1 })).data
-    // Operator khusus untuk event uji ini (§28: satu operator satu event).
-    const operatorEmail = `op.uji.${stamp}@antrean.local`
-    const operatorRoleId = (await api('GET', '/api/admin/users')).data.roles.find(r => r.key === 'OPERATOR').id
-    const operator = (await api('POST', '/api/admin/users', {
-      name: `Operator Uji ${stamp}`,
-      email: operatorEmail,
-      password: 'password123',
-      roleId: operatorRoleId,
-      isActive: true,
-    })).data
+    const counter2 = (await api('POST', '/api/admin/counters', { eventId, code: 'PL2', name: 'Loket Phase5 Dua', isActive: true, displayOrder: 2 })).data
     await api('PUT', `/api/admin/counters/${counter.id}/services`, { queueTypeIds: [queueType.id] })
-    await api('POST', '/api/admin/assignments', { userId: operator.id, counterId: counter.id })
+    await api('PUT', `/api/admin/counters/${counter2.id}/services`, { queueTypeIds: [queueType.id] })
+
+    // Operator khusus untuk event uji ini (§28: satu operator duduk di satu loket).
+    const operatorRoleId = (await api('GET', '/api/admin/users')).data.roles.find(r => r.key === 'OPERATOR').id
+    async function buatOperator(suffix, seatCounterId) {
+      const email = `op${suffix}.uji.${stamp}@antrean.local`
+      const user = (await api('POST', '/api/admin/users', {
+        name: `Operator Uji ${suffix} ${stamp}`,
+        email,
+        password: 'password123',
+        roleId: operatorRoleId,
+        isActive: true,
+      })).data
+      createdUserIds.push(user.id)
+      await api('POST', '/api/admin/assignments', { userId: user.id, counterId: seatCounterId })
+      return { ...user, email }
+    }
+
+    const operator = await buatOperator('1', counter.id)
+    const operator2 = await buatOperator('2', counter2.id)
 
     const adminCookie = cookie
-    await login(operatorEmail)
+    await login(operator.email)
     const called = await api('POST', '/api/operator/queue/next', { queueTypeId: queueType.id, counterId: counter.id })
+    await login(operator2.email)
+    const called2 = await api('POST', '/api/operator/queue/next', { queueTypeId: queueType.id, counterId: counter2.id })
     cookie = adminCookie
+
+    const withCounters = await api('GET', `/api/display/${device.deviceCode}/state`)
+    const perLoket = new Map((withCounters.data?.counters ?? []).map(c => [c.name, c.current?.queueNumber ?? null]))
+    record('state display menyebut nomor yang sedang dilayani TIAP loket',
+      perLoket.get('Loket Phase5') === called.data?.queueNumber
+      && perLoket.get('Loket Phase5 Dua') === called2.data?.queueNumber,
+      [...perLoket].map(([nama, nomor]) => `${nama}=${nomor ?? '—'}`).join(', ') || 'tidak ada loket')
 
     const browser = await chromium.launch()
     const page = await browser.newPage({ viewport: { width: 1280, height: 720 } })
@@ -215,6 +273,23 @@ async function main() {
     record('layar merender template buatan builder', rendered,
       rendered ? `${called.data?.queueNumber} + teks berjalan tampil` : 'template tidak terlihat')
 
+    /**
+     * Papan per loket diperiksa lewat teksnya: nama loket dan nomor yang sedang
+     * dipanggil harus muncul BERSAMAAN, karena itulah gunanya widget ini —
+     * pengunjung tahu nomor mana ada di loket mana.
+     */
+    const boardOk = await waitFor(async () => {
+      const text = await page.locator('body').innerText()
+      return text.includes('Loket Phase5')
+        && text.includes('Loket Phase5 Dua')
+        && text.includes(called.data?.queueNumber ?? '')
+        && text.includes(called2.data?.queueNumber ?? '')
+    }, 20_000)
+    record('widget papan loket menampilkan nomor per loket di layar', boardOk,
+      boardOk
+        ? `${called.data?.queueNumber} @ Loket Phase5 · ${called2.data?.queueNumber} @ Loket Phase5 Dua`
+        : 'nama loket / nomornya tidak lengkap di layar')
+
     const logoShown = await page.locator(`img[src="${media.url}"]`).count()
     record('widget logo memakai berkas dari media library', logoShown > 0, logoShown ? 'gambar termuat' : 'gambar tidak ada')
 
@@ -227,13 +302,40 @@ async function main() {
   }
   finally {
     await login('superadmin@antrean.local').catch(() => {})
-      const leftovers = await api('GET', `/api/admin/queues?eventId=${eventId}&perPage=200`).catch(() => null)
-      for (const q of leftovers?.data?.items ?? []) {
-        if (['WAITING', 'CALLED', 'SERVING'].includes(q.status)) {
-          await api('POST', `/api/operator/queue/${q.id}/cancel`, { reason: 'Pembersihan uji' }).catch(() => {})
-        }
+
+    const leftovers = await api('GET', `/api/admin/queues?eventId=${eventId}&perPage=200`).catch(() => null)
+    for (const q of leftovers?.data?.items ?? []) {
+      if (['WAITING', 'CALLED', 'SERVING'].includes(q.status)) {
+        await api('POST', `/api/operator/queue/${q.id}/cancel`, { reason: 'Pembersihan uji' }).catch(() => {})
       }
+    }
+
+    /**
+     * Milik event dibereskan SEBELUM event-nya dihapus.
+     *
+     * Penghapusan event hanya menandainya terhapus, dan seluruh endpoint admin
+     * menolak bekerja pada event yang sudah ditandai — perangkat & template uji jadi
+     * tertinggal permanen, lalu media di dalamnya pun tak bisa dihapus karena masih
+     * dirujuk widget. Urutannya juga berantai: perangkat memakai template, template
+     * & playlist memakai media.
+     */
+    for (const id of createdDeviceIds) {
+      await api('DELETE', `/api/admin/displays/${id}`).catch(() => {})
+    }
+    for (const id of createdTemplateIds) {
+      await api('DELETE', `/api/admin/display-templates/${id}`).catch(() => {})
+    }
+    for (const id of createdPlaylistIds) {
+      await api('DELETE', `/api/admin/playlists/${id}`).catch(() => {})
+    }
+    for (const id of createdMediaIds) {
+      await api('DELETE', `/api/admin/media/${id}`).catch(() => {})
+    }
+
     await api('DELETE', `/api/admin/events/${eventId}`).catch(() => {})
+    for (const id of createdUserIds) {
+      await api('DELETE', `/api/admin/users/${id}`).catch(() => {})
+    }
   }
 
   const failed = results.filter(r => !r.ok)

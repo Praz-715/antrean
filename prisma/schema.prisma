@@ -103,6 +103,8 @@ enum WidgetType {
   QRCODE
   PLAYLIST
   HTML
+  COUNTER_BOARD
+  VISITOR_INFO
 }
 
 enum MediaType {

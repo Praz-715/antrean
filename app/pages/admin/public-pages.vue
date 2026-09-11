@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { apiFetch } from '../../composables/useApi'
 import { PERMISSIONS } from '../../../shared/constants/permissions'
+import { SELECT_NONE, nullableValue } from '../../../shared/constants/ui'
 
 definePageMeta({ layout: 'admin', middleware: 'admin' })
 useHead({ title: 'Halaman Publik' })
@@ -35,24 +36,68 @@ const pages = ref<PublicPageRow[]>([])
 const queueTypes = ref<Array<{ id: string, code: string, name: string }>>([])
 const pending = ref(false)
 
+/**
+ * Gambar dari media library, untuk memilih logo & latar halaman publik.
+ *
+ * Sebelumnya kedua kolom ini berupa URL yang harus ditulis tangan — mudah salah
+ * ketik dan tidak ada cara tahu berkas apa saja yang sudah diunggah. Bila akun yang
+ * membuka halaman ini tidak punya izin `media.view`, daftarnya dibiarkan kosong dan
+ * kolomnya kembali menjadi kolom URL biasa — bukan jalan buntu.
+ */
+const mediaImages = ref<Array<{ id: string, name: string, url: string, type: string }>>([])
+const mediaReadable = ref(true)
+
 async function load() {
   if (!currentId.value) { pages.value = []; return }
   pending.value = true
   try {
-    const [list, types] = await Promise.all([
+    /**
+     * Ketiga permintaan dimulai BERSAMAAN, bukan berurutan: `apiFetch` yang
+     * dipanggil setelah `await` di dalam setup kehilangan konteks Nuxt dan
+     * menjatuhkan render server.
+     */
+    const [list, types, media] = await Promise.all([
       apiFetch<PublicPageRow[]>('/api/admin/public-pages', { query: { eventId: currentId.value } }),
       apiFetch<typeof queueTypes.value>('/api/admin/queue-types', { query: { eventId: currentId.value } }),
+      apiFetch<typeof mediaImages.value>('/api/admin/media', { query: { type: 'IMAGE' } }).catch(() => null),
     ])
     pages.value = list
     queueTypes.value = types
+    mediaReadable.value = media !== null
+    mediaImages.value = media ?? []
   }
   finally { pending.value = false }
 }
 watch(currentId, load, { immediate: true })
 
+/**
+ * Pilihan gambar untuk satu kolom.
+ *
+ * Nilai yang tersimpan adalah URL-nya, bukan id media — itulah yang dipakai halaman
+ * publik. URL lama yang tidak (lagi) ada di media library tetap ditawarkan sebagai
+ * satu opsi, supaya menyunting halaman tidak diam-diam menghapus gambarnya.
+ */
+function imageOptions(current: string) {
+  const options = [
+    { label: '— tanpa gambar —', value: SELECT_NONE },
+    ...mediaImages.value.map(m => ({ label: m.name, value: m.url })),
+  ]
+  if (current && !mediaImages.value.some(m => m.url === current)) {
+    options.push({ label: `${current} (di luar media library)`, value: current })
+  }
+  return options
+}
+
 // ---- form ----
 const modalOpen = ref(false)
 const editing = ref<PublicPageRow | null>(null)
+/** Sentinel select tidak menerima string kosong; proksi ini menerjemahkannya. */
+function imageProxy(field: 'logoUrl' | 'backgroundUrl') {
+  return computed({
+    get: () => form[field] || SELECT_NONE,
+    set: (value: string) => { form[field] = nullableValue(value) ?? '' },
+  })
+}
 const saving = ref(false)
 const form = reactive({
   title: '',
@@ -69,6 +114,9 @@ const form = reactive({
   maxPerIpPerDay: 5,
   requireCaptcha: false,
 })
+
+const logoValue = imageProxy('logoUrl')
+const backgroundValue = imageProxy('backgroundUrl')
 
 function openCreate() {
   editing.value = null
@@ -402,12 +450,55 @@ const captchaConfigured = computed(() => !!useRuntimeConfig().public.turnstileSi
             <UInput v-model="form.secondaryColor" type="color" class="w-full" />
           </UFormField>
 
-          <UFormField label="URL logo" hint="opsional">
-            <UInput v-model="form.logoUrl" class="w-full" placeholder="/media/logo.png" />
+          <UFormField label="Logo" hint="opsional">
+            <div class="flex items-center gap-2">
+              <USelectMenu
+                v-if="mediaReadable && mediaImages.length"
+                v-model="logoValue"
+                :items="imageOptions(form.logoUrl)"
+                value-key="value"
+                :search-input="{ placeholder: 'Cari berkas…' }"
+                placeholder="Pilih dari media library"
+                class="w-full"
+              />
+              <UInput v-else v-model="form.logoUrl" class="w-full" placeholder="/media/logo.png" />
+
+              <img
+                v-if="form.logoUrl"
+                :src="form.logoUrl"
+                alt=""
+                class="size-9 shrink-0 rounded border border-slate-200 object-contain dark:border-slate-800"
+              >
+            </div>
+            <template #help>
+              <span v-if="mediaReadable && !mediaImages.length">
+                Media library masih kosong —
+                <NuxtLink to="/admin/media" class="underline">unggah gambar dulu</NuxtLink>,
+                atau tulis URL-nya langsung.
+              </span>
+            </template>
           </UFormField>
 
-          <UFormField label="URL gambar latar" hint="opsional">
-            <UInput v-model="form.backgroundUrl" class="w-full" placeholder="/media/latar.jpg" />
+          <UFormField label="Gambar latar" hint="opsional">
+            <div class="flex items-center gap-2">
+              <USelectMenu
+                v-if="mediaReadable && mediaImages.length"
+                v-model="backgroundValue"
+                :items="imageOptions(form.backgroundUrl)"
+                value-key="value"
+                :search-input="{ placeholder: 'Cari berkas…' }"
+                placeholder="Pilih dari media library"
+                class="w-full"
+              />
+              <UInput v-else v-model="form.backgroundUrl" class="w-full" placeholder="/media/latar.jpg" />
+
+              <img
+                v-if="form.backgroundUrl"
+                :src="form.backgroundUrl"
+                alt=""
+                class="size-9 shrink-0 rounded border border-slate-200 object-cover dark:border-slate-800"
+              >
+            </div>
           </UFormField>
 
           <UFormField label="Teks footer" hint="opsional">

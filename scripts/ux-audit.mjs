@@ -959,6 +959,12 @@ async function main() {
     if (!removed?.success) {
       console.log(`  catatan: event uji tidak terhapus — ${removed?.message ?? 'permintaan gagal'}`)
     }
+
+    /**
+     * Operator uji ikut dihapus. Menghapus event saja tidak cukup — akunnya tetap
+     * berdiri dan menumpuk di halaman Pengguna sebagai "Operator Uji" palsu.
+     */
+    await api('DELETE', `/api/admin/users/${operator.id}`).catch(() => {})
   }
 
   console.log(`\n${passes.length} lolos · ${findings.length} temuan`)

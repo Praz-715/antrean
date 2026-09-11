@@ -45,6 +45,9 @@ export const publishService = {
     subtitle?: string | null
     description?: string | null
     slug?: string | null
+    logoUrl?: string | null
+    backgroundUrl?: string | null
+    infoHtml?: string | null
     allowedQueueTypeIds?: string[]
     maxPerIpPerDay?: number
     requireCaptcha?: boolean
@@ -68,6 +71,9 @@ export const publishService = {
         title: input.title,
         subtitle: input.subtitle ?? null,
         description: input.description ?? null,
+        logoUrl: input.logoUrl || null,
+        backgroundUrl: input.backgroundUrl || null,
+        infoHtml: input.infoHtml || null,
         theme: (input.theme ?? { primaryColor: '#1b5cf5' }) as never,
         allowedQueueTypeIds: (input.allowedQueueTypeIds ?? []) as never,
         maxPerIpPerDay: input.maxPerIpPerDay ?? 5,

@@ -12,6 +12,16 @@ const bodySchema = z.object({
   subtitle: z.string().trim().max(190).optional().nullable(),
   description: z.string().trim().max(2000).optional().nullable(),
   slug: z.string().trim().max(120).optional().nullable(),
+  /**
+   * Logo, gambar latar, dan informasi layanan HARUS diterima di sini, bukan hanya
+   * saat menyunting: modal "Halaman Publik Baru" sudah menyediakan ketiganya, dan
+   * sebelumnya nilainya dibuang tanpa pesan apa pun — admin mengisi logo, menekan
+   * simpan, lalu logonya hilang tanpa penjelasan.
+   */
+  logoUrl: z.string().trim().max(500).optional().nullable(),
+  backgroundUrl: z.string().trim().max(500).optional().nullable(),
+  // Disimpan & ditampilkan sebagai TEKS BIASA, bukan HTML (tidak ada sanitizer).
+  infoHtml: z.string().max(5000).optional().nullable(),
   allowedQueueTypeIds: z.array(idSchema).default([]),
   maxPerIpPerDay: z.number().int().min(0).max(1000).default(5),
   requireCaptcha: z.boolean().default(false),

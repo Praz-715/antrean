@@ -27,15 +27,37 @@ export interface RenderWidget {
 
 export interface BoardEntry {
   queueType: { id: string, code: string, name: string, color: string }
-  current: { queueNumber: string, status: string, priority?: number, counter: { name: string } | null } | null
+  current: {
+    queueNumber: string
+    status: string
+    priority?: number
+    counter: { name: string } | null
+    /** Isian formulir pengunjung, hanya field yang dipasang di template (§18). */
+    fields?: Record<string, string>
+  } | null
   waitingCount: number
   nextNumbers: string[]
+}
+
+/** Satu loket beserta nomor yang sedang dilayaninya (§19). */
+export interface CounterEntry {
+  id: string
+  code: string
+  name: string
+  services: Array<{ id: string, code: string, name: string, color: string }>
+  current: {
+    queueNumber: string
+    status: string
+    priority?: number
+    queueType: { id: string, code: string, name: string, color: string } | null
+  } | null
 }
 
 const props = defineProps<{
   widgets: RenderWidget[]
   background?: { color?: string, imageUrl?: string } | null
   board?: BoardEntry[]
+  counters?: CounterEntry[]
   organizationName?: string | null
   announcements?: Array<{ id: string, message: string }>
   mediaById?: Record<string, { url: string, type: string }>
@@ -86,6 +108,70 @@ function entryFor(widget: RenderWidget): BoardEntry | null {
   const board = props.board ?? []
   const wanted = widget.config?.queueTypeId as string | undefined
   return board.find(b => b.queueType.id === wanted) ?? board[0] ?? null
+}
+
+/** Loket contoh untuk pratinjau builder, supaya tata letaknya bisa dinilai. */
+const PREVIEW_COUNTERS: CounterEntry[] = [
+  { id: 'p1', code: 'L1', name: 'Loket 1', services: [], current: { queueNumber: 'A023', status: 'SERVING', priority: 0, queueType: { id: 'a', code: 'A', name: 'Pelayanan Umum', color: '#1b5cf5' } } },
+  { id: 'p2', code: 'L2', name: 'Loket 2', services: [], current: { queueNumber: 'A024', status: 'CALLED', priority: 1, queueType: { id: 'a', code: 'A', name: 'Pelayanan Umum', color: '#1b5cf5' } } },
+  { id: 'p3', code: 'L3', name: 'Loket 3', services: [], current: { queueNumber: 'B008', status: 'SERVING', priority: 0, queueType: { id: 'b', code: 'B', name: 'Pelayanan Khusus', color: '#7c3aed' } } },
+  { id: 'p4', code: 'L4', name: 'Loket 4', services: [], current: null },
+]
+
+/**
+ * Loket yang ditampilkan sebuah widget papan-loket.
+ *
+ * Bila widget dikunci pada satu jenis antrean, hanya loket yang MELAYANI jenis itu
+ * yang tampil — sesuai cara kerja loket sekarang: satu loket bisa melayani beberapa
+ * layanan, dan satu layanan bisa dilayani beberapa loket (§12).
+ */
+function countersFor(widget: RenderWidget): CounterEntry[] {
+  const all = props.counters?.length ? props.counters : (props.preview ? PREVIEW_COUNTERS : [])
+  const wanted = widget.config?.queueTypeId as string | undefined
+  const list = wanted ? all.filter(c => c.services.some(s => s.id === wanted)) : all
+  return widget.config?.showEmpty === false ? list.filter(c => c.current) : list
+}
+
+/** Jumlah kolom: mengikuti jumlah loket bila belum diatur, maksimal 4 per baris. */
+function counterColumns(widget: RenderWidget): number {
+  const configured = Number(widget.config?.columns ?? 0)
+  if (configured >= 1) return Math.min(configured, 6)
+  return Math.min(Math.max(countersFor(widget).length, 1), 4)
+}
+
+/**
+ * Isian formulir yang ditampilkan widget "Data Pengunjung".
+ *
+ * Label disimpan di dalam konfigurasi widget saat admin memilihnya, jadi layar tidak
+ * perlu memuat definisi formulir sama sekali — dan label tetap utuh walau formulirnya
+ * kemudian diubah.
+ */
+function visitorFieldsFor(widget: RenderWidget) {
+  const configured = (widget.config?.fields as Array<{ key: string, label: string }> | undefined) ?? []
+  const values = entryFor(widget)?.current?.fields ?? {}
+  const masked = widget.config?.mask === true
+
+  return configured
+    .filter(field => field?.key)
+    .map((field, index) => {
+      const raw = values[field.key] ?? (props.preview ? (index === 0 ? 'Budi Santoso' : 'Contoh isian') : '')
+      return { key: field.key, label: field.label || field.key, value: masked ? maskValue(raw) : raw }
+    })
+    .filter(field => field.value)
+}
+
+/**
+ * Samarkan sebagian isian.
+ *
+ * Untuk layar di ruang tunggu yang ramai: nama tetap bisa dikenali pemiliknya,
+ * tetapi tidak terbaca lengkap oleh semua orang. Separuh awal dibiarkan (minimal
+ * dua karakter), sisanya diganti titik.
+ */
+function maskValue(value: string) {
+  const text = value.trim()
+  if (text.length <= 3) return text
+  const keep = Math.max(2, Math.ceil(text.length / 2))
+  return text.slice(0, keep) + '•'.repeat(Math.min(6, text.length - keep))
 }
 
 function styleOf(widget: RenderWidget) {
@@ -212,6 +298,101 @@ const dateText = computed(() => now.value.toLocaleDateString('id-ID', { weekday:
             :style="{ fontSize: '0.2em' }"
           >
             {{ entryFor(widget)?.current?.counter?.name ?? (preview ? 'Loket 1' : '') }}
+          </p>
+        </template>
+
+        <!-- Nomor antrean + isian formulir pengunjungnya -->
+        <template v-else-if="widget.type === 'VISITOR_INFO'">
+          <p
+            v-if="isPriorityQueue(entryFor(widget)?.current?.priority)"
+            data-priority-badge
+            class="w-full truncate font-extrabold uppercase tracking-[0.2em] text-amber-400"
+            :style="{ fontSize: '0.2em' }"
+          >
+            ★ {{ PRIORITY_LABEL }}
+          </p>
+
+          <p
+            v-if="widget.config?.showQueueNumber !== false"
+            class="queue-number w-full truncate leading-none"
+            :class="highlighted && entryFor(widget)?.current?.queueNumber === highlighted ? 'animate-pulse' : ''"
+          >
+            {{ entryFor(widget)?.current?.queueNumber ?? (preview ? 'A023' : '—') }}
+          </p>
+
+          <div v-if="visitorFieldsFor(widget).length" class="mt-[0.06em] w-full">
+            <p
+              v-for="field in visitorFieldsFor(widget)"
+              :key="field.key"
+              class="w-full truncate"
+              :style="{ fontSize: '0.34em' }"
+            >
+              <span v-if="widget.config?.showLabel !== false" class="opacity-60">{{ field.label }}: </span>{{ field.value }}
+            </p>
+          </div>
+
+          <p v-else-if="preview" class="w-full truncate opacity-60" :style="{ fontSize: '0.24em' }">
+            Pilih isian formulir pada panel properti
+          </p>
+        </template>
+
+        <!-- Nomor yang sedang dilayani di tiap loket -->
+        <template v-else-if="widget.type === 'COUNTER_BOARD'">
+          <p
+            v-if="widget.config?.showQueueTypeName && entryFor(widget)"
+            class="w-full truncate opacity-70"
+            :style="{ fontSize: '0.22em' }"
+          >
+            {{ entryFor(widget)?.queueType.name }}
+          </p>
+
+          <div
+            v-if="countersFor(widget).length"
+            class="grid min-h-0 w-full flex-1"
+            :style="{
+              gridTemplateColumns: `repeat(${counterColumns(widget)}, minmax(0, 1fr))`,
+              gap: '0.1em',
+            }"
+          >
+            <div
+              v-for="counter in countersFor(widget)"
+              :key="counter.id"
+              class="flex h-full flex-col items-center justify-center overflow-hidden rounded-[0.12em] px-[0.06em] py-[0.05em] transition-all duration-500"
+              :class="highlighted && counter.current?.queueNumber === highlighted
+                ? 'bg-white/20 ring-[0.03em] ring-white'
+                : 'bg-white/10'"
+            >
+              <p class="w-full truncate opacity-70" :style="{ fontSize: '0.26em' }">
+                {{ counter.name }}
+              </p>
+              <p
+                class="queue-number w-full truncate leading-none"
+                :class="highlighted && counter.current?.queueNumber === highlighted ? 'animate-pulse' : ''"
+                :style="counter.current ? undefined : { opacity: 0.35 }"
+              >
+                {{ counter.current?.queueNumber ?? '—' }}
+              </p>
+              <!-- Penanda prioritas harus terbaca dari jauh, bukan sekadar warna -->
+              <p
+                v-if="isPriorityQueue(counter.current?.priority)"
+                data-priority-badge
+                class="w-full truncate font-extrabold uppercase tracking-[0.15em] text-amber-400"
+                :style="{ fontSize: '0.18em' }"
+              >
+                ★ {{ PRIORITY_LABEL }}
+              </p>
+              <p
+                v-else-if="widget.config?.showService !== false && counter.current?.queueType"
+                class="w-full truncate opacity-60"
+                :style="{ fontSize: '0.18em' }"
+              >
+                {{ counter.current.queueType.name }}
+              </p>
+            </div>
+          </div>
+
+          <p v-else class="w-full truncate opacity-60" :style="{ fontSize: '0.22em' }">
+            Belum ada loket aktif
           </p>
         </template>
 

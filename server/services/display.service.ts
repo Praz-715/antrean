@@ -102,9 +102,22 @@ export const displayService = {
     })
     if (!device) throw errors.notFound('Perangkat display tidak ditemukan')
 
+    /**
+     * Isian formulir yang diminta template ini.
+     *
+     * Dihitung dari widget-nya, bukan dikirim borongan: perangkat hanya menerima
+     * field yang memang dipasang admin di layar (§18). Widget "Data Pengunjung"
+     * menyimpan pilihannya sebagai `config.fields = [{ key, label }]`.
+     */
+    const visitorFieldKeys = (device.template?.widgets ?? []).flatMap((widget) => {
+      const fields = (widget.config as { fields?: Array<{ key?: unknown }> } | null)?.fields
+      if (!Array.isArray(fields)) return []
+      return fields.map(f => (typeof f?.key === 'string' ? f.key : null)).filter((k): k is string => !!k)
+    })
+
     const [settings, board, openState, announcements] = await Promise.all([
       settingService.forEvent(device.event),
-      queueService.publicBoard(device.eventId),
+      queueService.publicBoard(device.eventId, { visitorFieldKeys }),
       eventService.getOpenState(device.eventId),
       prisma.announcement.findMany({
         where: {
@@ -122,6 +135,15 @@ export const displayService = {
     const filtered = device.type === 'QUEUE_TYPE' && device.queueTypeId
       ? board.board.filter(b => b.queueType.id === device.queueTypeId)
       : board.board
+
+    /**
+     * Perangkat yang dikunci pada satu layanan hanya menerima loket yang MELAYANI
+     * layanan itu — kalau tidak, papan per loket ikut menampilkan loket yang tidak
+     * ada hubungannya dengan layar tersebut.
+     */
+    const counters = device.type === 'QUEUE_TYPE' && device.queueTypeId
+      ? board.counters.filter(c => c.services.some(s => s.id === device.queueTypeId))
+      : board.counters
 
     // Jangan menulis pada setiap pembacaan: display polling tiap 10 detik, dan
     // indikator "terakhir terlihat" tidak butuh presisi setinggi itu (§45).
@@ -155,6 +177,7 @@ export const displayService = {
         voiceLanguage: String(settings[SETTING_KEYS.DISPLAY_VOICE_LANGUAGE]),
       },
       board: filtered,
+      counters,
       announcements,
       ...assets,
     }

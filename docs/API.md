@@ -413,6 +413,28 @@ pengunjung tidak ikut hilang. Hanya satu formulir aktif per event.
 serta peta `mediaById` dan `playlistById` berisi URL berkas yang dirujuk widget — sehingga layar
 tidak perlu memanggil endpoint tambahan.
 
+Selain `board` (per JENIS ANTREAN), respons juga membawa `counters` (per LOKET) untuk widget
+"Nomor per Loket" — satu layanan sering dilayani 2–4 loket sekaligus:
+
+```json
+{
+  "counters": [
+    {
+      "id": "01L1…", "code": "L1", "name": "Loket 1",
+      "services": [{ "id": "01A…", "code": "A", "name": "Pelayanan Umum", "color": "#1b5cf5" }],
+      "current": {
+        "queueNumber": "A023", "status": "SERVING", "priority": 0, "lastCalledAt": "2026-09-11T04:20:00.000Z",
+        "queueType": { "id": "01A…", "code": "A", "name": "Pelayanan Umum", "color": "#1b5cf5" }
+      }
+    }
+  ]
+}
+```
+
+Hanya loket **aktif** yang disertakan, urut `displayOrder`. Perangkat bertipe `QUEUE_TYPE` hanya
+menerima loket yang melayani layanan tersebut. Antrean yang dipanggil tanpa loket (pengawas lintas
+layanan, §57.6) tidak muncul di sini — tidak ada kotak loket yang bisa mewakilinya.
+
 ### Pengumuman
 
 | Endpoint | Permission |
@@ -485,9 +507,58 @@ tersebut memuat ulang:
 }
 ```
 
-Tipe widget: `CURRENT_QUEUE QUEUE_LIST CLOCK DATE LOGO IMAGE VIDEO TEXT RUNNING_TEXT ANNOUNCEMENT
-ORG_NAME QRCODE PLAYLIST`. Widget bertipe media/playlist merujuk berkas lewat `mediaId` / `playlistId`.
-Template yang masih dipakai perangkat tidak bisa dihapus (`CONFLICT`).
+Tipe widget: `CURRENT_QUEUE COUNTER_BOARD VISITOR_INFO QUEUE_LIST CLOCK DATE LOGO IMAGE VIDEO TEXT
+RUNNING_TEXT ANNOUNCEMENT ORG_NAME QRCODE PLAYLIST`. Widget bertipe media/playlist merujuk berkas lewat
+`mediaId` / `playlistId`. Template yang masih dipakai perangkat tidak bisa dihapus (`CONFLICT`).
+
+`COUNTER_BOARD` — "Nomor per Loket" — menggambar satu kotak untuk tiap loket beserta nomor yang
+sedang dilayaninya:
+
+```json
+{
+  "type": "COUNTER_BOARD", "x": 60, "y": 660, "width": 1800, "height": 300, "zIndex": 3,
+  "config": { "queueTypeId": "01A…", "columns": 0, "showEmpty": true, "showService": true },
+  "style": { "color": "#ffffff", "backgroundColor": "#0f172a", "fontSize": 92, "align": "center" }
+}
+```
+
+| `config` | Arti |
+|---|---|
+| `queueTypeId` | Hanya loket yang MELAYANI layanan ini. Kosong = seluruh loket event |
+| `columns` | `0` = mengikuti jumlah loket (maksimal 4 per baris), atau 1–6 |
+| `showEmpty` | `false` menyembunyikan loket yang belum memanggil |
+| `showService` | Nama layanan di bawah nomor tiap loket |
+
+Nomor yang ditampilkan adalah nomor yang benar-benar ada di loket itu — termasuk bila loket tersebut
+sedang melayani layanan lain (satu loket boleh melayani beberapa layanan, §12). Nomor prioritas
+mendapat penanda `★ PRIORITAS` di kotaknya.
+
+`VISITOR_INFO` — "Data Pengunjung" — menampilkan nomor antrean beserta **isian formulir** pengunjung
+yang sedang dipanggil (§18), mis. `A023` + `Nama: Budi Santoso`:
+
+```json
+{
+  "type": "VISITOR_INFO", "x": 260, "y": 240, "width": 1400, "height": 420, "zIndex": 1,
+  "config": {
+    "queueTypeId": "01A…",
+    "fields": [{ "key": "nama", "label": "Nama" }],
+    "showQueueNumber": true, "showLabel": true, "mask": false
+  }
+}
+```
+
+| `config` | Arti |
+|---|---|
+| `fields` | Isian yang ditampilkan. `key` = kunci field pada Form Builder; `label` disalin saat admin memilih, sehingga layar tidak perlu memuat definisi formulir |
+| `showQueueNumber` | Nomor antrean di atas isian (default aktif) |
+| `showLabel` | Tampilkan label di depan nilai (`Nama: Budi`) |
+| `mask` | Samarkan separuh akhir nilainya (`Budi San•••`) untuk ruang tunggu yang ramai |
+
+**Hanya field yang dipasang di template yang dikirim ke perangkat.** `GET /state` menghitung kunci
+yang dipakai widget, lalu `board[].current.fields` dan `counters[].current.fields` hanya memuat kunci
+tersebut — nomor HP atau nomor identitas tidak pernah ikut terkirim ke layar hanya karena pengunjung
+mengisinya. Nilainya diambil dari snapshot jawaban saat pengunjung mendaftar, jadi mengubah formulir
+tidak mengubah nomor yang sedang tampil.
 
 ---
 

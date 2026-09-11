@@ -4,6 +4,8 @@
  */
 export const WIDGET_TYPES = [
   'CURRENT_QUEUE',
+  'COUNTER_BOARD',
+  'VISITOR_INFO',
   'QUEUE_LIST',
   'CLOCK',
   'DATE',
@@ -30,6 +32,16 @@ export interface WidgetMeta {
   needsMedia?: boolean
   needsPlaylist?: boolean
   needsQueueType?: boolean
+  /** Butuh daftar field formulir (dari Form Builder) pada panel properti. */
+  needsFormFields?: boolean
+}
+
+/** Satu isian formulir yang dipilih admin untuk ditampilkan di layar. */
+export interface WidgetField {
+  /** Kunci field pada Form Builder — dipakai mencocokkan data pengunjung. */
+  key: string
+  /** Label disalin saat dipilih, supaya layar tidak perlu memuat formulirnya. */
+  label: string
 }
 
 export const WIDGET_CATALOG: WidgetMeta[] = [
@@ -40,6 +52,23 @@ export const WIDGET_CATALOG: WidgetMeta[] = [
     description: 'Nomor yang sedang dipanggil beserta loketnya',
     defaultSize: { width: 600, height: 420 },
     needsQueueType: true,
+  },
+  {
+    type: 'COUNTER_BOARD',
+    label: 'Nomor per Loket',
+    icon: 'i-lucide-layout-grid',
+    description: 'Satu kotak untuk tiap loket beserta nomor yang sedang dilayaninya',
+    defaultSize: { width: 1400, height: 380 },
+    needsQueueType: true,
+  },
+  {
+    type: 'VISITOR_INFO',
+    label: 'Data Pengunjung',
+    icon: 'i-lucide-user-round',
+    description: 'Nomor antrean beserta isian formulir pengunjungnya (mis. nama)',
+    defaultSize: { width: 900, height: 280 },
+    needsQueueType: true,
+    needsFormFields: true,
   },
   {
     type: 'QUEUE_LIST',
@@ -79,6 +108,16 @@ export function defaultWidgetConfig(type: WidgetType): Record<string, unknown> {
       return { limit: 5 }
     case 'CURRENT_QUEUE':
       return { showCounter: true, showQueueTypeName: true }
+    case 'COUNTER_BOARD':
+      /** `columns: 0` berarti mengikuti jumlah loket (maksimal 4 per baris). */
+      return { columns: 0, showEmpty: true, showService: true }
+    case 'VISITOR_INFO':
+      /**
+       * `fields` sengaja kosong: tidak ada isian formulir yang tampil di layar
+       * sebelum admin memilihnya sendiri. Data pengunjung bisa berisi nomor HP
+       * atau nomor identitas, jadi menampilkannya harus keputusan yang disengaja.
+       */
+      return { fields: [], showQueueNumber: true, showLabel: true, mask: false }
     case 'VIDEO':
       return { loop: true, muted: true }
     default:
@@ -104,6 +143,10 @@ export function defaultWidgetStyle(type: WidgetType): WidgetStyle {
   switch (type) {
     case 'CURRENT_QUEUE':
       return { ...base, backgroundColor: '#0f172a', color: '#ffffff', fontSize: 160, fontWeight: 800 }
+    case 'COUNTER_BOARD':
+      return { ...base, backgroundColor: '#0f172a', color: '#ffffff', fontSize: 96, fontWeight: 800 }
+    case 'VISITOR_INFO':
+      return { ...base, backgroundColor: '#0f172a', color: '#ffffff', fontSize: 88, fontWeight: 800 }
     case 'QUEUE_LIST':
       return { ...base, backgroundColor: '#0f172a', color: '#e2e8f0', fontSize: 44, fontWeight: 700 }
     case 'CLOCK':
