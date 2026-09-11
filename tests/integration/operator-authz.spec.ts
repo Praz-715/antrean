@@ -2,7 +2,7 @@ import { afterAll, beforeAll, describe, expect, it } from 'vitest'
 import { prisma } from '../../server/utils/prisma'
 import { queueService } from '../../server/services/queue.service'
 import { assertTransition, operatorQueueService } from '../../server/services/operator.service'
-import { assignOperator, makeCounter, makeEvent, makeOrganization, makeQueueType, makeUser, resetDatabase } from '../helpers/factory'
+import { makeCounter, makeEvent, makeOrganization, makeQueueType, makeUser, resetDatabase, seatOperator } from '../helpers/factory'
 
 /** §12, §57.5, §57.7–§57.9 — operator hanya boleh menyentuh assignment-nya. */
 describe('otorisasi operator & aturan transisi', () => {
@@ -24,8 +24,9 @@ describe('otorisasi operator & aturan transisi', () => {
     const opA = await makeUser(org.id, 'Operator A')
     const opB = await makeUser(org.id, 'Operator B')
 
-    await assignOperator(opA.id, event.id, typeA.id, counterA.id)
-    await assignOperator(opB.id, event.id, typeB.id, counterB.id)
+    // Tiap operator duduk di loketnya sendiri, dan loket itu melayani satu layanan.
+    await seatOperator(opA.id, counterA.id, [typeA.id])
+    await seatOperator(opB.id, counterB.id, [typeB.id])
 
     eventId = event.id
     typeAId = typeA.id

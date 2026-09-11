@@ -157,18 +157,18 @@ model Organization {
   updatedAt DateTime  @updatedAt @map("updated_at") @db.DateTime(3)
   deletedAt DateTime? @map("deleted_at") @db.DateTime(3)
 
-  users          User[]
-  roles          Role[]
-  events         Event[]
-  queues         Queue[]
-  visitors       Visitor[]
-  media          Media[]
-  playlists      Playlist[]
-  dataSources    DataSource[]
+  users            User[]
+  roles            Role[]
+  events           Event[]
+  queues           Queue[]
+  visitors         Visitor[]
+  media            Media[]
+  playlists        Playlist[]
+  dataSources      DataSource[]
   displayTemplates DisplayTemplate[]
-  auditLogs      AuditLog[]
-  systemSettings SystemSetting[]
-  notifications  Notification[]
+  auditLogs        AuditLog[]
+  systemSettings   SystemSetting[]
+  notifications    Notification[]
 
   @@map("organizations")
 }
@@ -178,33 +178,34 @@ model Organization {
 // ==================================================================
 
 model User {
-  id            String    @id @db.Char(26)
-  organizationId String?  @map("organization_id") @db.Char(26)
-  name          String    @db.VarChar(150)
-  email         String    @db.VarChar(190)
-  emailVerified Boolean   @default(false) @map("email_verified")
-  image         String?   @db.VarChar(500)
-  username      String?   @db.VarChar(60)
-  phone         String?   @db.VarChar(30)
-  isActive      Boolean   @default(true) @map("is_active")
-  lastLoginAt   DateTime? @map("last_login_at") @db.DateTime(3)
-  createdAt     DateTime  @default(now()) @map("created_at") @db.DateTime(3)
-  updatedAt     DateTime  @updatedAt @map("updated_at") @db.DateTime(3)
-  deletedAt     DateTime? @map("deleted_at") @db.DateTime(3)
+  id             String    @id @db.Char(26)
+  organizationId String?   @map("organization_id") @db.Char(26)
+  name           String    @db.VarChar(150)
+  email          String    @db.VarChar(190)
+  emailVerified  Boolean   @default(false) @map("email_verified")
+  image          String?   @db.VarChar(500)
+  username       String?   @db.VarChar(60)
+  phone          String?   @db.VarChar(30)
+  isActive       Boolean   @default(true) @map("is_active")
+  lastLoginAt    DateTime? @map("last_login_at") @db.DateTime(3)
+  createdAt      DateTime  @default(now()) @map("created_at") @db.DateTime(3)
+  updatedAt      DateTime  @updatedAt @map("updated_at") @db.DateTime(3)
+  deletedAt      DateTime? @map("deleted_at") @db.DateTime(3)
 
-  organization Organization? @relation(fields: [organizationId], references: [id])
-  sessions     Session[]
-  accounts     Account[]
-  userRoles    UserRole[]
-  assignments  OperatorAssignment[]
-  queues       Queue[]
-  queueEvents  QueueEvent[]
-  media        Media[]
-  testimonials Testimonial[]
-  auditLogs    AuditLog[]
-  settings     SystemSetting[]
+  organization  Organization?       @relation(fields: [organizationId], references: [id])
+  sessions      Session[]
+  accounts      Account[]
+  userRoles     UserRole[]
+  /// Satu operator duduk di satu loket (§28) — relasi tunggal, bukan daftar.
+  assignment    OperatorAssignment?
+  queues        Queue[]
+  queueEvents   QueueEvent[]
+  media         Media[]
+  testimonials  Testimonial[]
+  auditLogs     AuditLog[]
+  settings      SystemSetting[]
   notifications Notification[]
-  exportJobs   ExportJob[]
+  exportJobs    ExportJob[]
 
   @@unique([email])
   @@unique([organizationId, username])
@@ -322,36 +323,35 @@ model UserRole {
 // ==================================================================
 
 model Event {
-  id             String      @id @db.Char(26)
-  organizationId String      @map("organization_id") @db.Char(26)
-  name           String      @db.VarChar(150)
-  slug           String      @db.VarChar(150)
-  description    String?     @db.Text
-  status         EventStatus @default(DRAFT)
-  timezone       String      @default("Asia/Jakarta") @db.VarChar(64)
-  startDate      DateTime?   @map("start_date") @db.Date
-  endDate        DateTime?   @map("end_date") @db.Date
-  branding       Json?
-  settings       Json?
-  allowFinishAfterClose Boolean @default(true) @map("allow_finish_after_close")
-  createdAt      DateTime    @default(now()) @map("created_at") @db.DateTime(3)
-  updatedAt      DateTime    @updatedAt @map("updated_at") @db.DateTime(3)
-  deletedAt      DateTime?   @map("deleted_at") @db.DateTime(3)
+  id                    String      @id @db.Char(26)
+  organizationId        String      @map("organization_id") @db.Char(26)
+  name                  String      @db.VarChar(150)
+  slug                  String      @db.VarChar(150)
+  description           String?     @db.Text
+  status                EventStatus @default(DRAFT)
+  timezone              String      @default("Asia/Jakarta") @db.VarChar(64)
+  startDate             DateTime?   @map("start_date") @db.Date
+  endDate               DateTime?   @map("end_date") @db.Date
+  branding              Json?
+  settings              Json?
+  allowFinishAfterClose Boolean     @default(true) @map("allow_finish_after_close")
+  createdAt             DateTime    @default(now()) @map("created_at") @db.DateTime(3)
+  updatedAt             DateTime    @updatedAt @map("updated_at") @db.DateTime(3)
+  deletedAt             DateTime?   @map("deleted_at") @db.DateTime(3)
 
-  organization    Organization         @relation(fields: [organizationId], references: [id])
-  schedules       EventSchedule[]
-  queueTypes      QueueType[]
-  counters        Counter[]
-  queueCounters   QueueCounter[]
-  queues          Queue[]
-  visitors        Visitor[]
-  assignments     OperatorAssignment[]
-  formDefinitions FormDefinition[]
-  publicPages     PublicPage[]
-  displayDevices  DisplayDevice[]
+  organization     Organization      @relation(fields: [organizationId], references: [id])
+  schedules        EventSchedule[]
+  queueTypes       QueueType[]
+  counters         Counter[]
+  queueCounters    QueueCounter[]
+  queues           Queue[]
+  visitors         Visitor[]
+  formDefinitions  FormDefinition[]
+  publicPages      PublicPage[]
+  displayDevices   DisplayDevice[]
   displayTemplates DisplayTemplate[]
-  announcements   Announcement[]
-  testimonials    Testimonial[]
+  announcements    Announcement[]
+  testimonials     Testimonial[]
 
   @@unique([organizationId, slug])
   @@index([status])
@@ -382,30 +382,30 @@ model EventSchedule {
 // ==================================================================
 
 model QueueType {
-  id             String    @id @db.Char(26)
-  eventId        String    @map("event_id") @db.Char(26)
-  code           String    @db.VarChar(20)
-  name           String    @db.VarChar(120)
-  description    String?   @db.VarChar(500)
-  prefix         String    @db.VarChar(10)
-  startingNumber Int       @default(1) @map("starting_number")
-  numberFormat   String    @default("{prefix}{seq}") @map("number_format") @db.VarChar(50)
-  padding        Int       @default(3)
-  color          String    @default("#2563eb") @db.VarChar(20)
-  icon           String?   @db.VarChar(60)
-  isActive       Boolean   @default(true) @map("is_active")
-  displayOrder   Int       @default(0) @map("display_order")
-  maxWaiting     Int?      @map("max_waiting")
-  estServiceSeconds Int    @default(480) @map("est_service_seconds")
-  createdAt      DateTime  @default(now()) @map("created_at") @db.DateTime(3)
-  updatedAt      DateTime  @updatedAt @map("updated_at") @db.DateTime(3)
-  deletedAt      DateTime? @map("deleted_at") @db.DateTime(3)
+  id                String    @id @db.Char(26)
+  eventId           String    @map("event_id") @db.Char(26)
+  code              String    @db.VarChar(20)
+  name              String    @db.VarChar(120)
+  description       String?   @db.VarChar(500)
+  prefix            String    @db.VarChar(10)
+  startingNumber    Int       @default(1) @map("starting_number")
+  numberFormat      String    @default("{prefix}{seq}") @map("number_format") @db.VarChar(50)
+  padding           Int       @default(3)
+  color             String    @default("#2563eb") @db.VarChar(20)
+  icon              String?   @db.VarChar(60)
+  isActive          Boolean   @default(true) @map("is_active")
+  displayOrder      Int       @default(0) @map("display_order")
+  maxWaiting        Int?      @map("max_waiting")
+  estServiceSeconds Int       @default(480) @map("est_service_seconds")
+  createdAt         DateTime  @default(now()) @map("created_at") @db.DateTime(3)
+  updatedAt         DateTime  @updatedAt @map("updated_at") @db.DateTime(3)
+  deletedAt         DateTime? @map("deleted_at") @db.DateTime(3)
 
-  event          Event                @relation(fields: [eventId], references: [id], onDelete: Cascade)
-  queueCounters  QueueCounter[]
-  queues         Queue[]
-  assignments    OperatorAssignment[]
-  displayDevices DisplayDevice[]
+  event           Event            @relation(fields: [eventId], references: [id], onDelete: Cascade)
+  queueCounters   QueueCounter[]
+  queues          Queue[]
+  counterServices CounterService[]
+  displayDevices  DisplayDevice[]
 
   @@unique([eventId, code])
   @@index([eventId, isActive])
@@ -423,11 +423,33 @@ model Counter {
   updatedAt    DateTime @updatedAt @map("updated_at") @db.DateTime(3)
 
   event       Event                @relation(fields: [eventId], references: [id], onDelete: Cascade)
+  services    CounterService[]
   assignments OperatorAssignment[]
   queues      Queue[]
 
   @@unique([eventId, code])
   @@map("counters")
+}
+
+/// Layanan yang dilayani sebuah loket (§12, §28).
+///
+/// Loket adalah tempat fisik: satu loket bisa melayani beberapa jenis antrean
+/// (mis. "Loket 1" untuk Pidana sekaligus Tata Negara). Karena loket dimiliki satu
+/// event, seluruh cakupan operator ikut terkunci pada event itu — tanpa perlu
+/// pemeriksaan tambahan di kode.
+model CounterService {
+  id           String   @id @db.Char(26)
+  counterId    String   @map("counter_id") @db.Char(26)
+  queueTypeId  String   @map("queue_type_id") @db.Char(26)
+  displayOrder Int      @default(0) @map("display_order")
+  createdAt    DateTime @default(now()) @map("created_at") @db.DateTime(3)
+
+  counter   Counter   @relation(fields: [counterId], references: [id], onDelete: Cascade)
+  queueType QueueType @relation(fields: [queueTypeId], references: [id], onDelete: Cascade)
+
+  @@unique([counterId, queueTypeId])
+  @@index([queueTypeId])
+  @@map("counter_services")
 }
 
 /// Sumber nomor urut. Satu baris per (event, queue type, service date).
@@ -450,31 +472,31 @@ model QueueCounter {
 }
 
 model Queue {
-  id             String      @id @db.Char(26)
-  organizationId String      @map("organization_id") @db.Char(26)
-  eventId        String      @map("event_id") @db.Char(26)
-  queueTypeId    String      @map("queue_type_id") @db.Char(26)
-  visitorId      String?     @map("visitor_id") @db.Char(26)
-  serviceDate    DateTime    @map("service_date") @db.Date
-  sequenceNumber Int         @map("sequence_number")
-  queueNumber    String      @map("queue_number") @db.VarChar(32)
-  status         QueueStatus @default(WAITING)
-  priority       Int         @default(0)
-  publicToken    String      @unique @map("public_token") @db.VarChar(64)
-  operatorId     String?     @map("operator_id") @db.Char(26)
-  counterId      String?     @map("counter_id") @db.Char(26)
-  recallCount    Int         @default(0) @map("recall_count")
-  calledAt          DateTime? @map("called_at") @db.DateTime(3)
-  lastCalledAt      DateTime? @map("last_called_at") @db.DateTime(3)
-  servingStartedAt  DateTime? @map("serving_started_at") @db.DateTime(3)
-  finishedAt        DateTime? @map("finished_at") @db.DateTime(3)
-  waitingSeconds    Int?      @map("waiting_seconds")
-  serviceSeconds    Int?      @map("service_seconds")
-  source         QueueSource @default(PUBLIC)
-  note           String?     @db.VarChar(500)
-  createdAt      DateTime    @default(now()) @map("created_at") @db.DateTime(3)
-  updatedAt      DateTime    @updatedAt @map("updated_at") @db.DateTime(3)
-  deletedAt      DateTime?   @map("deleted_at") @db.DateTime(3)
+  id               String      @id @db.Char(26)
+  organizationId   String      @map("organization_id") @db.Char(26)
+  eventId          String      @map("event_id") @db.Char(26)
+  queueTypeId      String      @map("queue_type_id") @db.Char(26)
+  visitorId        String?     @map("visitor_id") @db.Char(26)
+  serviceDate      DateTime    @map("service_date") @db.Date
+  sequenceNumber   Int         @map("sequence_number")
+  queueNumber      String      @map("queue_number") @db.VarChar(32)
+  status           QueueStatus @default(WAITING)
+  priority         Int         @default(0)
+  publicToken      String      @unique @map("public_token") @db.VarChar(64)
+  operatorId       String?     @map("operator_id") @db.Char(26)
+  counterId        String?     @map("counter_id") @db.Char(26)
+  recallCount      Int         @default(0) @map("recall_count")
+  calledAt         DateTime?   @map("called_at") @db.DateTime(3)
+  lastCalledAt     DateTime?   @map("last_called_at") @db.DateTime(3)
+  servingStartedAt DateTime?   @map("serving_started_at") @db.DateTime(3)
+  finishedAt       DateTime?   @map("finished_at") @db.DateTime(3)
+  waitingSeconds   Int?        @map("waiting_seconds")
+  serviceSeconds   Int?        @map("service_seconds")
+  source           QueueSource @default(PUBLIC)
+  note             String?     @db.VarChar(500)
+  createdAt        DateTime    @default(now()) @map("created_at") @db.DateTime(3)
+  updatedAt        DateTime    @updatedAt @map("updated_at") @db.DateTime(3)
+  deletedAt        DateTime?   @map("deleted_at") @db.DateTime(3)
 
   organization Organization @relation(fields: [organizationId], references: [id])
   event        Event        @relation(fields: [eventId], references: [id])
@@ -499,8 +521,8 @@ model QueueEvent {
   id             String       @id @db.Char(26)
   queueId        String       @map("queue_id") @db.Char(26)
   eventType      String       @map("event_type") @db.VarChar(40)
-  previousStatus QueueStatus?  @map("previous_status")
-  newStatus      QueueStatus?  @map("new_status")
+  previousStatus QueueStatus? @map("previous_status")
+  newStatus      QueueStatus? @map("new_status")
   operatorId     String?      @map("operator_id") @db.Char(26)
   metadata       Json?
   createdAt      DateTime     @default(now()) @map("created_at") @db.DateTime(3)
@@ -513,24 +535,25 @@ model QueueEvent {
   @@map("queue_events")
 }
 
+/// Penempatan operator: SATU operator duduk di SATU loket (§12, §28).
+///
+/// `user_id` dibuat unique, jadi "satu operator melayani satu event" dijamin
+/// database — bukan lagi pemeriksaan di service yang bisa terlewat. Layanan yang
+/// ia tangani diturunkan dari loketnya (`counter_services`), sehingga menambah
+/// layanan pada loket otomatis berlaku bagi seluruh operator di loket itu.
+///
+/// Satu loket boleh diisi beberapa operator (mis. pergantian giliran); yang tidak
+/// mungkin adalah satu operator memegang dua loket.
 model OperatorAssignment {
-  id          String   @id @db.Char(26)
-  userId      String   @map("user_id") @db.Char(26)
-  eventId     String   @map("event_id") @db.Char(26)
-  queueTypeId String   @map("queue_type_id") @db.Char(26)
-  counterId   String?  @map("counter_id") @db.Char(26)
-  isDefault   Boolean  @default(false) @map("is_default")
-  createdAt   DateTime @default(now()) @map("created_at") @db.DateTime(3)
-  updatedAt   DateTime @updatedAt @map("updated_at") @db.DateTime(3)
+  id        String   @id @db.Char(26)
+  userId    String   @unique @map("user_id") @db.Char(26)
+  counterId String   @map("counter_id") @db.Char(26)
+  createdAt DateTime @default(now()) @map("created_at") @db.DateTime(3)
+  updatedAt DateTime @updatedAt @map("updated_at") @db.DateTime(3)
 
-  user      User      @relation(fields: [userId], references: [id], onDelete: Cascade)
-  event     Event     @relation(fields: [eventId], references: [id], onDelete: Cascade)
-  queueType QueueType @relation(fields: [queueTypeId], references: [id], onDelete: Cascade)
-  counter   Counter?  @relation(fields: [counterId], references: [id])
+  user    User    @relation(fields: [userId], references: [id], onDelete: Cascade)
+  counter Counter @relation(fields: [counterId], references: [id], onDelete: Cascade)
 
-  @@unique([userId, queueTypeId])
-  @@index([queueTypeId])
-  @@index([eventId])
   @@index([counterId])
   @@map("operator_assignments")
 }
@@ -823,10 +846,10 @@ model Media {
   updatedAt       DateTime  @updatedAt @map("updated_at") @db.DateTime(3)
   deletedAt       DateTime? @map("deleted_at") @db.DateTime(3)
 
-  organization Organization    @relation(fields: [organizationId], references: [id])
-  uploadedBy   User?           @relation(fields: [uploadedById], references: [id])
+  organization  Organization    @relation(fields: [organizationId], references: [id])
+  uploadedBy    User?           @relation(fields: [uploadedById], references: [id])
   playlistItems PlaylistItem[]
-  widgets      DisplayWidget[]
+  widgets       DisplayWidget[]
 
   @@index([organizationId, type])
   @@index([uploadedById])

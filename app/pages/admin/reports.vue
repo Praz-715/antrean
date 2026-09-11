@@ -176,9 +176,9 @@ function printReport() {
     <template v-else>
       <!-- ============ LAPORAN HARIAN ============ -->
       <div class="mb-3 flex flex-wrap items-center gap-2 no-print">
-        <UButton icon="i-lucide-chevron-left" size="sm" variant="outline" color="neutral" @click="reportDate = shift(reportDate, -1)" />
-        <UInput v-model="reportDate" type="date" size="sm" class="w-40" />
-        <UButton icon="i-lucide-chevron-right" size="sm" variant="outline" color="neutral" :disabled="reportDate >= today" @click="reportDate = shift(reportDate, 1)" />
+        <UButton icon="i-lucide-chevron-left" aria-label="Hari sebelumnya" title="Hari sebelumnya" size="sm" variant="outline" color="neutral" @click="reportDate = shift(reportDate, -1)" />
+        <UInput v-model="reportDate" type="date" size="sm" class="w-40" aria-label="Tanggal laporan" title="Tanggal laporan" />
+        <UButton icon="i-lucide-chevron-right" aria-label="Hari berikutnya" title="Hari berikutnya" size="sm" variant="outline" color="neutral" :disabled="reportDate >= today" @click="reportDate = shift(reportDate, 1)" />
         <UButton size="sm" variant="ghost" color="neutral" label="Hari ini" :disabled="reportDate === today" @click="reportDate = today" />
         <UButton
           class="ml-auto"
@@ -429,7 +429,8 @@ function printReport() {
           Belum ada ekspor.
         </div>
 
-        <table v-else class="mt-5 w-full text-sm">
+        <div v-else class="mt-5 overflow-x-auto">
+          <table class="w-full text-sm">
           <thead class="border-y border-slate-200 text-left text-xs uppercase tracking-wide text-slate-500 dark:border-slate-800">
             <tr>
               <th class="py-2 font-medium">
@@ -494,13 +495,16 @@ function printReport() {
                     variant="ghost"
                     color="error"
                     icon="i-lucide-trash-2"
+                    aria-label="Hapus berkas ekspor"
+                    title="Hapus berkas ekspor"
                     :action="() => deleteJob(job)"
                   />
                 </div>
               </td>
             </tr>
           </tbody>
-        </table>
+          </table>
+        </div>
       </div>
     </template>
   </div>

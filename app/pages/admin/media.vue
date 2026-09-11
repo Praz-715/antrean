@@ -358,7 +358,7 @@ const draftTotal = computed(() => draftItems.value.reduce((sum, i) => sum + Numb
                   [{ label: 'Hapus', icon: 'i-lucide-trash-2', color: 'error' as const, onSelect: () => (deleteTarget = item) }],
                 ]"
               >
-                <UButton icon="i-lucide-ellipsis-vertical" variant="ghost" color="neutral" size="xs" class="ml-auto" />
+                <UButton icon="i-lucide-ellipsis-vertical" aria-label="Menu tindakan" title="Menu tindakan" variant="ghost" color="neutral" size="xs" class="ml-auto" />
               </UDropdownMenu>
             </div>
           </div>
@@ -478,9 +478,9 @@ const draftTotal = computed(() => draftItems.value.reduce((sum, i) => sum + Numb
             <span class="min-w-0 flex-1 truncate text-sm">{{ item.media.name }}</span>
             <UInputNumber v-model="item.durationSeconds" :min="1" :max="3600" class="w-28" size="sm" />
             <span class="text-xs text-slate-400">detik</span>
-            <UButton icon="i-lucide-chevron-up" size="xs" variant="ghost" color="neutral" @click="moveItem(index, index - 1)" />
-            <UButton icon="i-lucide-chevron-down" size="xs" variant="ghost" color="neutral" @click="moveItem(index, index + 1)" />
-            <UButton icon="i-lucide-x" size="xs" variant="ghost" color="error" @click="draftItems.splice(index, 1)" />
+            <UButton icon="i-lucide-chevron-up" aria-label="Naikkan urutan" title="Naikkan urutan" size="xs" variant="ghost" color="neutral" @click="moveItem(index, index - 1)" />
+            <UButton icon="i-lucide-chevron-down" aria-label="Turunkan urutan" title="Turunkan urutan" size="xs" variant="ghost" color="neutral" @click="moveItem(index, index + 1)" />
+            <UButton icon="i-lucide-x" aria-label="Keluarkan dari playlist" title="Keluarkan dari playlist" size="xs" variant="ghost" color="error" @click="draftItems.splice(index, 1)" />
           </li>
         </ul>
       </div>

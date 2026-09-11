@@ -204,21 +204,47 @@ async function seedQueueTypes(eventId: string) {
   return result
 }
 
-async function seedCounters(eventId: string) {
+/**
+ * Loket beserta layanan yang dilayaninya (§12, §28).
+ *
+ * Layanan melekat pada loket, bukan pada operator: menambah layanan di sini
+ * otomatis berlaku bagi siapa pun yang duduk di loket itu. Loket 3 sengaja
+ * melayani DUA layanan sekaligus, supaya bilah pemilih layanan pada panel operator
+ * ikut teruji.
+ */
+async function seedCounters(eventId: string, queueTypes: Array<{ id: string, code: string }>) {
+  const byCode = new Map(queueTypes.map(t => [t.code, t.id]))
   const defs = [
-    { code: 'L1', name: 'Loket 1', order: 1 },
-    { code: 'L2', name: 'Loket 2', order: 2 },
-    { code: 'L3', name: 'Loket 3', order: 3 },
+    { code: 'L1', name: 'Loket 1', order: 1, services: ['A'] },
+    { code: 'L2', name: 'Loket 2', order: 2, services: ['B'] },
+    { code: 'L3', name: 'Loket 3', order: 3, services: ['A', 'C'] },
   ]
+
   const counters = []
   for (const def of defs) {
-    counters.push(await prisma.counter.upsert({
+    const counter = await prisma.counter.upsert({
       where: { eventId_code: { eventId, code: def.code } },
       update: { name: def.name, displayOrder: def.order },
       create: { id: ulid(), eventId, code: def.code, name: def.name, displayOrder: def.order },
-    }))
+    })
+
+    const queueTypeIds = def.services.map(code => byCode.get(code)).filter((id): id is string => !!id)
+    await prisma.counterService.deleteMany({ where: { counterId: counter.id } })
+    if (queueTypeIds.length) {
+      await prisma.counterService.createMany({
+        data: queueTypeIds.map((queueTypeId, index) => ({
+          id: ulid(),
+          counterId: counter.id,
+          queueTypeId,
+          displayOrder: index,
+        })),
+      })
+    }
+
+    counters.push({ ...counter, services: def.services })
   }
-  console.log(`  ✓ ${counters.length} loket`)
+
+  console.log(`  ✓ ${counters.length} loket beserta layanannya`)
   return counters
 }
 
@@ -327,38 +353,34 @@ async function main() {
 
   const event = await seedEvent(org.id)
   const queueTypes = await seedQueueTypes(event.id)
-  const counters = await seedCounters(event.id)
+  const counters = await seedCounters(event.id, queueTypes)
   await seedForm(event.id)
   await seedPublicPage(event.id, appUrl)
 
-  // Assignment operator → jenis antrean → loket
-  const assignments = [
-    { user: operator1, queueType: queueTypes[0]!, counter: counters[0]! },
-    { user: operator2, queueType: queueTypes[1]!, counter: counters[1]! },
+  /**
+   * Penempatan operator: satu operator duduk di satu loket (§28).
+   * Layanannya tidak disebut di sini — itu urusan loket.
+   */
+  const placements = [
+    { user: operator1, counter: counters[0]! },
+    { user: operator2, counter: counters[1]! },
   ]
-  for (const a of assignments) {
+  for (const p of placements) {
     await prisma.operatorAssignment.upsert({
-      where: { userId_queueTypeId: { userId: a.user.id, queueTypeId: a.queueType.id } },
-      update: { counterId: a.counter.id, isDefault: true },
-      create: {
-        id: ulid(),
-        userId: a.user.id,
-        eventId: event.id,
-        queueTypeId: a.queueType.id,
-        counterId: a.counter.id,
-        isDefault: true,
-      },
+      where: { userId: p.user.id },
+      update: { counterId: p.counter.id },
+      create: { id: ulid(), userId: p.user.id, counterId: p.counter.id },
     })
   }
-  console.log(`  ✓ ${assignments.length} assignment operator`)
+  console.log(`  ✓ ${placements.length} operator ditempatkan di loket`)
 
   console.log(`
 ─────────────────────────────────────────────
   Akun demo (DEVELOPMENT ONLY)
 ─────────────────────────────────────────────
   superadmin@antrean.local   ${DEV_PASSWORD}
-  operator1@antrean.local    ${DEV_PASSWORD}   → ${queueTypes[0]!.name} / ${counters[0]!.name}
-  operator2@antrean.local    ${DEV_PASSWORD}   → ${queueTypes[1]!.name} / ${counters[1]!.name}
+  operator1@antrean.local    ${DEV_PASSWORD}   → ${counters[0]!.name} (layanan ${counters[0]!.services.join(', ')})
+  operator2@antrean.local    ${DEV_PASSWORD}   → ${counters[1]!.name} (layanan ${counters[1]!.services.join(', ')})
 
   ⚠️  GANTI SELURUH PASSWORD DI ATAS sebelum dipakai di lingkungan nyata.
 

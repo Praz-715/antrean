@@ -4,7 +4,6 @@ import { PERMISSIONS } from '../../shared/constants/permissions'
 
 const { me, can, reset } = useMe()
 const route = useRoute()
-const colorMode = useColorMode()
 
 interface NavItem {
   label: string
@@ -55,7 +54,7 @@ const navigation: NavItem[] = [
     children: [
       { label: 'Pengguna', icon: 'i-lucide-user-cog', to: '/admin/operators', permission: [PERMISSIONS.USER_VIEW] },
       { label: 'Role & Izin', icon: 'i-lucide-shield-check', to: '/admin/roles', permission: [PERMISSIONS.ROLE_MANAGE] },
-      { label: 'Penugasan', icon: 'i-lucide-link', to: '/admin/assignments', permission: [PERMISSIONS.ASSIGNMENT_MANAGE] },
+      { label: 'Penempatan Operator', icon: 'i-lucide-link', to: '/admin/assignments', permission: [PERMISSIONS.ASSIGNMENT_MANAGE] },
     ],
   },
   {
@@ -130,13 +129,6 @@ const userMenu = computed(() => [
   [
     { label: 'Buka halaman operator', icon: 'i-lucide-headset', to: '/operator' },
     { label: 'Pengaturan', icon: 'i-lucide-settings', to: '/admin/settings' },
-  ],
-  [
-    {
-      label: colorMode.value === 'dark' ? 'Mode terang' : 'Mode gelap',
-      icon: colorMode.value === 'dark' ? 'i-lucide-sun' : 'i-lucide-moon',
-      onSelect: () => { colorMode.preference = colorMode.value === 'dark' ? 'light' : 'dark' },
-    },
   ],
   [{ label: 'Keluar', icon: 'i-lucide-log-out', color: 'error' as const, onSelect: onSignOut }],
 ])
@@ -235,6 +227,8 @@ const userMenu = computed(() => [
           class="hidden sm:inline-flex"
           label="Display"
         />
+
+        <UiThemeToggle />
 
         <UDropdownMenu :items="userMenu">
           <UButton variant="ghost" color="neutral" trailing-icon="i-lucide-chevron-down">

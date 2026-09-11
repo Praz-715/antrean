@@ -5,28 +5,47 @@ import { PERMISSIONS } from '../../../shared/constants/permissions'
 definePageMeta({ layout: 'admin', middleware: 'admin' })
 useHead({ title: 'Loket' })
 
+interface QueueTypeRef {
+  id: string
+  code: string
+  name: string
+  color: string
+  isActive?: boolean
+}
+
 interface Counter {
   id: string
   code: string
   name: string
   isActive: boolean
   displayOrder: number
+  /** Layanan yang dilayani loket ini — dari sinilah cakupan operatornya (§12, §28). */
+  services: QueueTypeRef[]
+  operators: Array<{ id: string, name: string }>
   _count?: { assignments: number }
 }
 
 const { can } = useMe()
 const { call } = useApi()
+// Warna layanan dipilih admin; disesuaikan agar tetap terbaca di tema gelap.
+const { readable } = useReadableColor()
 const { currentId, loadEvents } = useCurrentEvent()
 await loadEvents()
 
 const items = ref<Counter[]>([])
+const queueTypes = ref<QueueTypeRef[]>([])
 const pending = ref(false)
 
 async function load() {
-  if (!currentId.value) { items.value = []; return }
+  if (!currentId.value) { items.value = []; queueTypes.value = []; return }
   pending.value = true
   try {
-    items.value = await apiFetch<Counter[]>('/api/admin/counters', { query: { eventId: currentId.value } })
+    const [counters, types] = await Promise.all([
+      apiFetch<Counter[]>('/api/admin/counters', { query: { eventId: currentId.value } }),
+      apiFetch<QueueTypeRef[]>('/api/admin/queue-types', { query: { eventId: currentId.value } }),
+    ])
+    items.value = counters
+    queueTypes.value = types
   }
   finally { pending.value = false }
 }
@@ -64,6 +83,40 @@ async function save() {
   if (res) { modalOpen.value = false; await load() }
 }
 
+/**
+ * Pengatur layanan loket.
+ *
+ * Layanan melekat pada LOKET, bukan pada operator: mengubahnya di sini langsung
+ * berlaku bagi semua operator yang duduk di loket itu — tidak perlu menyentuh
+ * penugasan satu per satu.
+ */
+const servicesTarget = ref<Counter | null>(null)
+const selectedServices = ref<string[]>([])
+const savingServices = ref(false)
+
+function openServices(item: Counter) {
+  servicesTarget.value = item
+  selectedServices.value = item.services.map(s => s.id)
+}
+
+function toggleService(id: string) {
+  selectedServices.value = selectedServices.value.includes(id)
+    ? selectedServices.value.filter(x => x !== id)
+    : [...selectedServices.value, id]
+}
+
+async function saveServices() {
+  if (!servicesTarget.value) return
+  savingServices.value = true
+  const res = await call(
+    `/api/admin/counters/${servicesTarget.value.id}/services`,
+    { method: 'PUT', body: { queueTypeIds: selectedServices.value } },
+    'Layanan loket disimpan',
+  )
+  savingServices.value = false
+  if (res) { servicesTarget.value = null; await load() }
+}
+
 const deleteTarget = ref<Counter | null>(null)
 const deleting = ref(false)
 async function confirmDelete() {
@@ -87,7 +140,7 @@ async function confirmDelete() {
         <UButton
           v-if="can(PERMISSIONS.COUNTER_MANAGE)"
           icon="i-lucide-plus"
-          label="Loket"
+          label="Tambah Loket"
           :disabled="!currentId"
           @click="openCreate"
         />
@@ -137,25 +190,94 @@ async function confirmDelete() {
               [{ label: 'Hapus', icon: 'i-lucide-trash-2', color: 'error' as const, onSelect: () => (deleteTarget = item) }],
             ]"
           >
-            <UButton icon="i-lucide-ellipsis-vertical" variant="ghost" color="neutral" size="xs" />
+            <UButton icon="i-lucide-ellipsis-vertical" aria-label="Menu tindakan" title="Menu tindakan" variant="ghost" color="neutral" size="xs" />
           </UDropdownMenu>
         </div>
 
         <p class="mt-3 font-semibold">
           {{ item.name }}
         </p>
-        <p class="text-xs text-slate-500">
-          {{ item._count?.assignments ?? 0 }} operator ditugaskan
+
+        <div class="mt-2 flex flex-wrap gap-1">
+          <span
+            v-for="service in item.services"
+            :key="service.id"
+            class="rounded px-1.5 py-0.5 text-xs font-medium"
+            :style="{ backgroundColor: service.color + '1a', color: readable(service.color) }"
+          >{{ service.code }}</span>
+          <span v-if="!item.services.length" class="text-xs text-amber-600 dark:text-amber-400">
+            belum melayani layanan apa pun
+          </span>
+        </div>
+
+        <p class="mt-2 text-xs text-slate-500">
+          {{ item.operators.length }} operator
+          <template v-if="item.operators.length">
+            · {{ item.operators.map(o => o.name).join(', ') }}
+          </template>
         </p>
-        <UBadge
-          class="mt-2"
-          size="sm"
-          variant="subtle"
-          :color="item.isActive ? 'success' : 'neutral'"
-          :label="item.isActive ? 'Aktif' : 'Nonaktif'"
-        />
+
+        <div class="mt-2 flex items-center gap-2">
+          <UBadge
+            size="sm"
+            variant="subtle"
+            :color="item.isActive ? 'success' : 'neutral'"
+            :label="item.isActive ? 'Aktif' : 'Nonaktif'"
+          />
+          <UButton
+            v-if="can(PERMISSIONS.COUNTER_MANAGE)"
+            size="xs"
+            variant="ghost"
+            color="neutral"
+            icon="i-lucide-list-checks"
+            label="Atur layanan"
+            @click="openServices(item)"
+          />
+        </div>
       </div>
     </div>
+
+    <UModal
+      :open="!!servicesTarget"
+      :title="`Layanan ${servicesTarget?.name ?? ''}`"
+      description="Loket melayani jenis antrean yang dicentang. Operator yang duduk di loket ini otomatis menangani layanan tersebut."
+      @update:open="(v) => { if (!v) servicesTarget = null }"
+    >
+      <template #body>
+        <div v-if="!queueTypes.length" class="rounded-lg border border-dashed border-slate-300 p-4 text-center text-sm text-slate-500 dark:border-slate-700">
+          Event ini belum punya jenis antrean.
+        </div>
+        <div v-else class="space-y-2">
+          <label
+            v-for="type in queueTypes"
+            :key="type.id"
+            class="flex cursor-pointer items-center gap-3 rounded-lg px-2 py-2 hover:bg-slate-50 dark:hover:bg-slate-800/50"
+          >
+            <UCheckbox
+              :model-value="selectedServices.includes(type.id)"
+              @update:model-value="() => toggleService(type.id)"
+            />
+            <span
+              class="rounded px-1.5 py-0.5 text-xs font-semibold"
+              :style="{ backgroundColor: type.color + '1a', color: readable(type.color) }"
+            >{{ type.code }}</span>
+            <span class="flex-1 text-sm">{{ type.name }}</span>
+            <UBadge v-if="type.isActive === false" size="sm" color="neutral" variant="subtle" label="Nonaktif" />
+          </label>
+
+          <p v-if="!selectedServices.length && (servicesTarget?.operators.length ?? 0) > 0" class="pt-2 text-sm text-amber-600 dark:text-amber-400">
+            Loket ini masih diisi {{ servicesTarget?.operators.length }} operator. Mengosongkan layanannya akan ditolak — pindahkan operatornya lebih dulu.
+          </p>
+        </div>
+      </template>
+
+      <template #footer>
+        <div class="flex w-full justify-end gap-2">
+          <UButton variant="ghost" color="neutral" label="Batal" @click="servicesTarget = null" />
+          <UButton :loading="savingServices" icon="i-lucide-save" label="Simpan Layanan" @click="saveServices" />
+        </div>
+      </template>
+    </UModal>
 
     <UModal
       v-model:open="modalOpen"

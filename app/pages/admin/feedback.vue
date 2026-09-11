@@ -334,6 +334,8 @@ function timeText(value: string) {
               variant="ghost"
               color="error"
               icon="i-lucide-trash-2"
+              aria-label="Hapus testimoni"
+              title="Hapus testimoni"
               @click="deleteTarget = item"
             />
           </div>

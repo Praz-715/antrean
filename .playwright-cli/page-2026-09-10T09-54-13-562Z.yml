@@ -1,0 +1,35 @@
+- generic [ref=e4]:
+  - generic [ref=e5]:
+    - generic [ref=e7]: ANTREAN
+    - generic [ref=e9]:
+      - paragraph [ref=e10]:
+        - text: Kelola Antrean.
+        - text: Layani Lebih Cepat.
+      - paragraph [ref=e11]: Satu sistem antrean untuk rumah sakit, instansi, bank, kampus, atau event apa pun — jenis layanan, formulir, dan tampilan display semuanya bisa Anda atur sendiri.
+      - generic [ref=e12]:
+        - generic [ref=e13]:
+          - generic [ref=e14]: A023
+          - generic [ref=e15]: Sedang dilayani
+        - generic [ref=e16]:
+          - generic [ref=e17]: 12m
+          - generic [ref=e18]: Rata-rata tunggu
+    - paragraph [ref=e19]: © 2026 ANTREAN
+  - generic [ref=e21]:
+    - heading "Masuk ke akun Anda" [level=1] [ref=e22]
+    - paragraph [ref=e23]: Gunakan akun administrator atau operator yang telah didaftarkan.
+    - generic [ref=e24]:
+      - generic [ref=e25]:
+        - generic [ref=e28]: Email*
+        - textbox "Email*" [ref=e31]:
+          - /placeholder: nama@instansi.go.id
+      - generic [ref=e34]:
+        - generic [ref=e37]: Kata Sandi*
+        - textbox "Kata Sandi*" [ref=e40]:
+          - /placeholder: ••••••••
+      - button "Masuk" [ref=e43]:
+        - generic [ref=e45]: Masuk
+    - generic [ref=e46]:
+      - paragraph [ref=e47]: Akun demo (development)
+      - list [ref=e48]:
+        - listitem [ref=e49]: superadmin@antrean.local · password123
+        - listitem [ref=e50]: operator1@antrean.local · password123

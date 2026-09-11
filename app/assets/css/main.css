@@ -22,8 +22,22 @@
   --color-brand-950: #142257;
 }
 
+/**
+ * Warna primer dipilih PER TEMA, bukan satu nilai untuk keduanya.
+ *
+ * Nuxt UI menulis teks tombol primer dengan `--ui-text-inverted`, yang pada tema
+ * gelap berubah menjadi gelap. Dengan latar brand-600 yang tetap, teks gelap itu
+ * hanya mencapai 3,3:1 — di bawah 4,5:1 WCAG AA — dan setiap tombol utama di tema
+ * gelap ikut terkena (terukur lewat `npm run ux-audit`). Brand-400 yang lebih
+ * terang mengembalikan kontrasnya ke ±6:1 tanpa mengubah identitas warnanya, dan
+ * sekaligus menaikkan kontras tautan/ikon `text-primary` di atas latar gelap.
+ */
 :root {
   --ui-primary: var(--color-brand-600);
+}
+
+.dark {
+  --ui-primary: var(--color-brand-400);
 }
 
 /* Status antrean — dipakai badge & display */
@@ -59,4 +73,22 @@ html {
 
 body {
   @apply antialiased;
+}
+
+/* ------------------------------------------------------------------
+   Kontras teks sekunder pada tema gelap
+
+   Seluruh antarmuka memakai `text-slate-500` untuk teks pendukung. Di tema
+   terang rasionya aman, tetapi di atas latar gelap hanya mencapai 3,7:1 —
+   di bawah 4,5:1 yang diminta WCAG AA untuk teks berukuran biasa (terukur
+   lewat `npm run ux-audit`).
+
+   Dinaikkan satu langkah di satu tempat saja. Menyunting 211 pemakaian
+   `text-slate-500` satu per satu hanya akan membuat aturan yang sama
+   tersebar dan gampang terlewat pada halaman berikutnya.
+------------------------------------------------------------------ */
+@layer utilities {
+  .dark .text-slate-500 {
+    color: var(--color-slate-400);
+  }
 }

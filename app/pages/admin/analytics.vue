@@ -20,6 +20,8 @@ interface Analytics {
 }
 
 const { current, currentId, loadEvents } = useCurrentEvent()
+// Warna layanan dipilih admin; disesuaikan agar tetap terbaca di tema gelap.
+const { readable } = useReadableColor()
 await loadEvents()
 
 // tanggal mengikuti zona waktu event, bukan UTC maupun zona peramban
@@ -259,7 +261,7 @@ const cards = computed(() => {
     >
       <template #actions>
         <UiEventPicker />
-        <UButton icon="i-lucide-refresh-cw" variant="outline" color="neutral" :loading="pending" @click="load" />
+        <UButton icon="i-lucide-refresh-cw" aria-label="Muat ulang data" title="Muat ulang data" variant="outline" color="neutral" :loading="pending" @click="load" />
       </template>
     </UiPageHeading>
 
@@ -274,9 +276,9 @@ const cards = computed(() => {
         :label="preset.label"
         @click="applyPreset(preset.days)"
       />
-      <UInput v-model="from" type="date" size="sm" class="w-40" />
+      <UInput v-model="from" type="date" size="sm" class="w-40" aria-label="Tanggal mulai" title="Tanggal mulai" />
       <span class="text-slate-400">—</span>
-      <UInput v-model="to" type="date" size="sm" class="w-40" />
+      <UInput v-model="to" type="date" size="sm" class="w-40" aria-label="Tanggal akhir" title="Tanggal akhir" />
       <USelect
         v-model="queueTypeId"
         :items="[{ label: 'Semua layanan', value: SELECT_ALL }, ...queueTypes.map(t => ({ label: `${t.code} · ${t.name}`, value: t.id }))]"
@@ -417,7 +419,7 @@ const cards = computed(() => {
               <tbody class="divide-y divide-slate-100 dark:divide-slate-800">
                 <tr v-for="row in data?.byQueueType ?? []" :key="row.id">
                   <td class="px-5 py-2">
-                    <span class="rounded px-1.5 py-0.5 text-xs font-medium" :style="{ backgroundColor: row.color + '1a', color: row.color }">
+                    <span class="rounded px-1.5 py-0.5 text-xs font-medium" :style="{ backgroundColor: row.color + '1a', color: readable(row.color) }">
                       {{ row.code }}
                     </span>
                     <span class="ml-2">{{ row.name }}</span>

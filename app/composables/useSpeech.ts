@@ -96,8 +96,19 @@ export function useSpeech(initial: Partial<SpeechSettings> = {}) {
   }
 
   /** "Nomor antrean A 0 2 3, silakan menuju Loket 1." */
-  function announceQueue(params: { queueNumber: string, queueTypeName?: string | null, counterName?: string | null }) {
-    const parts = [`Nomor antrean, ${spellQueueNumber(params.queueNumber)}`]
+  function announceQueue(params: {
+    queueNumber: string
+    queueTypeName?: string | null
+    counterName?: string | null
+    priority?: boolean
+  }) {
+    // Kata "prioritas" diletakkan di depan supaya terdengar sebelum nomornya —
+    // pengunjung lain jadi paham kenapa nomor itu dipanggil lebih dulu.
+    const parts = [
+      params.priority
+        ? `Antrean prioritas, nomor ${spellQueueNumber(params.queueNumber)}`
+        : `Nomor antrean, ${spellQueueNumber(params.queueNumber)}`,
+    ]
     if (params.counterName) parts.push(`silakan menuju ${params.counterName}`)
     else if (params.queueTypeName) parts.push(`silakan menuju ${params.queueTypeName}`)
     speak(parts.join(', ') + '.')

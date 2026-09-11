@@ -8,6 +8,8 @@ definePageMeta({ layout: 'admin', middleware: 'admin' })
 const route = useRoute()
 const eventId = route.params.id as string
 const { can } = useMe()
+// Warna layanan dipilih admin; disesuaikan agar tetap terbaca di tema gelap.
+const { readable } = useReadableColor()
 const { call } = useApi()
 const { setCurrent, loadEvents } = useCurrentEvent()
 
@@ -378,7 +380,7 @@ function copyAll(fromDay: number) {
               v-for="qt in detail.queueTypes"
               :key="qt.id"
               class="rounded-lg px-2.5 py-1 text-xs font-semibold"
-              :style="{ backgroundColor: qt.color + '1a', color: qt.color }"
+              :style="{ backgroundColor: qt.color + '1a', color: readable(qt.color) }"
             >
               {{ qt.code }} · {{ qt.name }}
             </span>

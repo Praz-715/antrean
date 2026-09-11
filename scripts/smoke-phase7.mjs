@@ -136,9 +136,18 @@ async function main() {
   })
   await api('POST', `/api/admin/forms/${form.id}/activate`)
 
-  const users = await api('GET', '/api/admin/users')
-  const operator = users.data.users.find(u => u.email === 'operator1@antrean.local')
-  await api('POST', '/api/admin/assignments', { userId: operator.id, eventId, queueTypeId: queueType.id, counterId: counter.id })
+  // Operator khusus untuk event uji ini (§28: satu operator satu event).
+  const operatorEmail = `op.uji.${stamp}@antrean.local`
+  const operatorRoleId = (await api('GET', '/api/admin/users')).data.roles.find(r => r.key === 'OPERATOR').id
+  const operator = (await api('POST', '/api/admin/users', {
+    name: `Operator Uji ${stamp}`,
+    email: operatorEmail,
+    password: 'password123',
+    roleId: operatorRoleId,
+    isActive: true,
+  })).data
+  await api('PUT', `/api/admin/counters/${counter.id}/services`, { queueTypeIds: [queueType.id] })
+  await api('POST', '/api/admin/assignments', { userId: operator.id, counterId: counter.id })
 
   const createdSources = []
 
@@ -175,7 +184,7 @@ async function main() {
     record('penilaian ditolak sebelum layanan selesai', tooEarly.code === 'QUEUE_INVALID_TRANSITION', tooEarly.message)
 
     const adminCookie = cookie
-    await login('operator1@antrean.local')
+    await login(operatorEmail)
     const called = await api('POST', '/api/operator/queue/next', { queueTypeId: queueType.id, counterId: counter.id })
     await api('POST', `/api/operator/queue/${called.data.id}/serving`, {})
     await api('POST', `/api/operator/queue/${called.data.id}/complete`, {})
@@ -227,7 +236,7 @@ async function main() {
 
     // ================= 3. BATAS DARI PENGATURAN =================
     const second = await take()
-    await login('operator1@antrean.local')
+    await login(operatorEmail)
     const called2 = await api('POST', '/api/operator/queue/next', { queueTypeId: queueType.id, counterId: counter.id })
     const recall1 = await api('POST', `/api/operator/queue/${called2.data.id}/recall`, {})
     const recall2 = await api('POST', `/api/operator/queue/${called2.data.id}/recall`, {})
@@ -383,7 +392,7 @@ async function main() {
 
     // Pengunjung yang belum menilai melihat form bintang
     const fresh = await take()
-    await login('operator1@antrean.local')
+    await login(operatorEmail)
     const freshCalled = await api('POST', '/api/operator/queue/next', { queueTypeId: queueType.id, counterId: counter.id })
     await api('POST', `/api/operator/queue/${freshCalled.data.id}/complete`, {})
     cookie = adminCookie
@@ -411,6 +420,12 @@ async function main() {
     await login('superadmin@antrean.local').catch(() => {})
     for (const id of createdSources) await api('DELETE', `/api/admin/data-sources/${id}`).catch(() => {})
     await api('POST', '/api/admin/settings/reset').catch(() => {})
+      const leftovers = await api('GET', `/api/admin/queues?eventId=${eventId}&perPage=200`).catch(() => null)
+      for (const q of leftovers?.data?.items ?? []) {
+        if (['WAITING', 'CALLED', 'SERVING'].includes(q.status)) {
+          await api('POST', `/api/operator/queue/${q.id}/cancel`, { reason: 'Pembersihan uji' }).catch(() => {})
+        }
+      }
     await api('DELETE', `/api/admin/events/${eventId}`).catch(() => {})
     stub.close()
   }

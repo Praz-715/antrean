@@ -11,7 +11,8 @@ const log = createLogger('scheduler')
 export interface SchedulerRunResult {
   checked: number
   opened: Array<{ eventId: string, name: string }>
-  closed: Array<{ eventId: string, name: string }>
+  /** `status` menyebutkan hasil akhirnya: SCHEDULED (menunggu jadwal berikutnya) atau CLOSED. */
+  closed: Array<{ eventId: string, name: string, status: 'SCHEDULED' | 'CLOSED' }>
   at: string
 }
 
@@ -66,7 +67,7 @@ export const schedulerService = {
       }).catch(() => {})
 
       if (decision === 'OPEN') opened.push({ eventId: event.id, name: event.name })
-      else closed.push({ eventId: event.id, name: event.name })
+      else closed.push({ eventId: event.id, name: event.name, status: decision })
     }
 
     if (opened.length || closed.length) {
@@ -85,14 +86,27 @@ type SchedulableEvent = {
   schedules: Array<{ dayOfWeek: number, openTime: string, closeTime: string, isClosed: boolean, overrideDate: Date | null }>
 }
 
-/** Status yang seharusnya berlaku sekarang, atau null bila sudah sesuai. */
-function decideStatus(event: SchedulableEvent, at: Date): 'OPEN' | 'CLOSED' | null {
+/**
+ * Status yang seharusnya berlaku sekarang, atau null bila sudah sesuai.
+ *
+ * Penutupan harian TIDAK memakai CLOSED, melainkan SCHEDULED — "sedang tidak
+ * melayani, akan melayani lagi sesuai jadwal". Ini bukan soal rasa bahasa:
+ * pembukaan otomatis hanya menyentuh event SCHEDULED, jadi kalau penutupan harian
+ * menandainya CLOSED, layanan yang seharusnya berjalan tiap hari berhenti selamanya
+ * setelah satu kali tutup dan harus dibuka manual setiap pagi.
+ *
+ * CLOSED disimpan untuk akhir yang sebenarnya: event yang sudah melewati tanggal
+ * berakhirnya, atau yang memang ditutup admin (penjadwal tidak pernah menyentuh
+ * event yang statusnya sudah CLOSED).
+ */
+function decideStatus(event: SchedulableEvent, at: Date): 'OPEN' | 'CLOSED' | 'SCHEDULED' | null {
   const tz = event.timezone
   const serviceDate = serviceDateString(tz, at)
   const today = parseServiceDate(serviceDate)
 
-  // Di luar rentang tanggal event: yang sedang terbuka wajib ditutup.
-  if (event.startDate && today < event.startDate) return event.status === 'OPEN' ? 'CLOSED' : null
+  // Belum masuk tanggal mulai: tutup sementara, tunggu jadwalnya.
+  if (event.startDate && today < event.startDate) return event.status === 'OPEN' ? 'SCHEDULED' : null
+  // Sudah melewati tanggal berakhir: ini benar-benar selesai.
   if (event.endDate && today > event.endDate) return event.status === 'OPEN' ? 'CLOSED' : null
 
   const override = event.schedules.find(s =>
@@ -100,18 +114,28 @@ function decideStatus(event: SchedulableEvent, at: Date): 'OPEN' | 'CLOSED' | nu
   const schedule = override
     ?? event.schedules.find(s => !s.overrideDate && s.dayOfWeek === dayOfWeekInTz(tz, at))
 
-  if (!schedule || schedule.isClosed) return event.status === 'OPEN' ? 'CLOSED' : null
+  // Hari ini tidak ada layanan (mis. Minggu) — tetap menunggu jadwal berikutnya.
+  if (!schedule || schedule.isClosed) return event.status === 'OPEN' ? 'SCHEDULED' : null
 
   const now = nowMinutesInTz(tz, at)
   const open = minutesOfDay(schedule.openTime)
   const close = minutesOfDay(schedule.closeTime)
 
   /**
-   * Penutupan hanya dilakukan SETELAH jam tutup, bukan sebelum jam buka.
-   * Event yang sengaja dibuka lebih awal oleh admin tidak boleh ditutup paksa
-   * beberapa menit kemudian hanya karena jadwalnya belum mulai.
+   * Penutupan hanya dilakukan SETELAH jam tutup, bukan sebelum jam buka: event yang
+   * sengaja dibuka lebih awal oleh admin tidak boleh ditutup paksa beberapa menit
+   * kemudian hanya karena jadwalnya belum mulai.
+   *
+   * Bila event masih punya hari layanan lain, statusnya kembali ke SCHEDULED supaya
+   * besok dibuka sendiri; hanya event tanpa hari layanan lain yang benar-benar ditutup.
    */
-  if (event.status === 'OPEN' && now >= close) return 'CLOSED'
+  if (event.status === 'OPEN' && now >= close) {
+    const todayDow = dayOfWeekInTz(tz, at)
+    const hasOtherServiceDays = event.schedules.some(s =>
+      !s.overrideDate && !s.isClosed && s.dayOfWeek !== todayDow)
+    return hasOtherServiceDays ? 'SCHEDULED' : 'CLOSED'
+  }
+
   if (event.status === 'SCHEDULED' && now >= open && now < close) return 'OPEN'
 
   return null

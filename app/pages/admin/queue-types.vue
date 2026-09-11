@@ -22,11 +22,13 @@ interface QueueType {
   displayOrder: number
   maxWaiting: number | null
   estServiceSeconds: number
-  _count?: { queues: number, assignments: number }
+  _count?: { queues: number, counterServices: number }
 }
 
 const { can } = useMe()
 const { call } = useApi()
+// Warna layanan dipilih admin; disesuaikan agar tetap terbaca di tema gelap.
+const { readable } = useReadableColor()
 const { current, currentId, loadEvents } = useCurrentEvent()
 await loadEvents()
 
@@ -168,7 +170,7 @@ const PRESET_COLORS = ['#1b5cf5', '#7c3aed', '#0d9488', '#ea580c', '#dc2626', '#
         <UButton
           v-if="can(PERMISSIONS.QUEUE_TYPE_MANAGE)"
           icon="i-lucide-plus"
-          label="Jenis Antrean"
+          label="Tambah Jenis Antrean"
           :disabled="!currentId"
           @click="openCreate"
         />
@@ -210,7 +212,7 @@ const PRESET_COLORS = ['#1b5cf5', '#7c3aed', '#0d9488', '#ea580c', '#dc2626', '#
       >
         <div
           class="flex size-12 shrink-0 items-center justify-center rounded-xl text-lg font-extrabold"
-          :style="{ backgroundColor: item.color + '1a', color: item.color }"
+          :style="{ backgroundColor: item.color + '1a', color: readable(item.color) }"
         >
           {{ item.code }}
         </div>
@@ -231,7 +233,7 @@ const PRESET_COLORS = ['#1b5cf5', '#7c3aed', '#0d9488', '#ea580c', '#dc2626', '#
           <p class="text-xs text-slate-500">
             Contoh nomor
           </p>
-          <p class="queue-number text-lg" :style="{ color: item.color }">
+          <p class="queue-number text-lg" :style="{ color: readable(item.color) }">
             {{ formatQueueNumber(item.numberFormat, { prefix: item.prefix, code: item.code, sequence: item.startingNumber, padding: item.padding }) }}
           </p>
         </div>
@@ -247,10 +249,10 @@ const PRESET_COLORS = ['#1b5cf5', '#7c3aed', '#0d9488', '#ea580c', '#dc2626', '#
 
         <div class="text-center">
           <p class="text-xs text-slate-500">
-            Operator
+            Loket
           </p>
           <p class="font-semibold">
-            {{ item._count?.assignments ?? 0 }}
+            {{ item._count?.counterServices ?? 0 }}
           </p>
         </div>
 
@@ -264,7 +266,7 @@ const PRESET_COLORS = ['#1b5cf5', '#7c3aed', '#0d9488', '#ea580c', '#dc2626', '#
             [{ label: 'Hapus', icon: 'i-lucide-trash-2', color: 'error' as const, onSelect: () => (deleteTarget = item) }],
           ]"
         >
-          <UButton icon="i-lucide-ellipsis-vertical" variant="ghost" color="neutral" size="xs" />
+          <UButton icon="i-lucide-ellipsis-vertical" aria-label="Menu tindakan" title="Menu tindakan" variant="ghost" color="neutral" size="xs" />
         </UDropdownMenu>
       </div>
     </div>
@@ -339,7 +341,7 @@ const PRESET_COLORS = ['#1b5cf5', '#7c3aed', '#0d9488', '#ea580c', '#dc2626', '#
               <p class="text-xs uppercase tracking-wide text-slate-500">
                 Pratinjau nomor
               </p>
-              <p class="queue-number text-2xl" :style="{ color: form.color }">
+              <p class="queue-number text-2xl" :style="{ color: readable(form.color) }">
                 {{ preview }}
               </p>
             </div>

@@ -565,6 +565,8 @@ const layers = computed(() =>
               variant="ghost"
               color="error"
               icon="i-lucide-trash-2"
+              aria-label="Hapus template"
+              title="Hapus template"
               @click="deleteTarget = item"
             />
           </div>
@@ -601,7 +603,8 @@ const layers = computed(() =>
             variant="ghost"
             color="neutral"
             :disabled="historyIndex <= 0"
-            title="Ctrl+Z"
+            aria-label="Batalkan perubahan"
+            title="Batalkan perubahan (Ctrl+Z)"
             @click="undo"
           />
           <UButton
@@ -610,7 +613,8 @@ const layers = computed(() =>
             variant="ghost"
             color="neutral"
             :disabled="historyIndex >= history.length - 1"
-            title="Ctrl+Shift+Z"
+            aria-label="Ulangi perubahan"
+            title="Ulangi perubahan (Ctrl+Shift+Z)"
             @click="redo"
           />
           <UiActionButton
@@ -863,6 +867,8 @@ const layers = computed(() =>
                 <span class="text-xs text-slate-400">z{{ layer.widget.zIndex }}</span>
                 <UButton
                   :icon="layer.widget.isVisible ? 'i-lucide-eye' : 'i-lucide-eye-off'"
+                  :aria-label="layer.widget.isVisible ? 'Sembunyikan widget' : 'Tampilkan widget'"
+                  :title="layer.widget.isVisible ? 'Sembunyikan widget' : 'Tampilkan widget'"
                   size="xs"
                   variant="ghost"
                   color="neutral"
@@ -912,6 +918,8 @@ const layers = computed(() =>
                   variant="ghost"
                   color="neutral"
                   icon="i-lucide-external-link"
+                  aria-label="Buka layar di tab baru"
+                  title="Buka layar di tab baru"
                   :to="`/display/${device.deviceCode}`"
                   target="_blank"
                   class="ml-auto"

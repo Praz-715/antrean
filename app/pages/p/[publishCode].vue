@@ -5,6 +5,8 @@ import type { ApiError } from '../../composables/useApi'
 definePageMeta({ layout: 'public' })
 
 const route = useRoute()
+// Warna layanan dipilih admin; disesuaikan agar tetap terbaca di tema gelap.
+const { readable } = useReadableColor()
 const publishCode = route.params.publishCode as string
 
 interface FormFieldDef {
@@ -344,7 +346,7 @@ function minutesLabel(seconds: number, count: number) {
             >
               <div
                 class="flex size-12 shrink-0 items-center justify-center rounded-xl text-lg font-extrabold"
-                :style="{ backgroundColor: type.color + '1a', color: type.color }"
+                :style="{ backgroundColor: type.color + '1a', color: readable(type.color) }"
               >
                 {{ type.code }}
               </div>
@@ -388,7 +390,7 @@ function minutesLabel(seconds: number, count: number) {
           <div class="mb-4 flex items-center gap-3 rounded-2xl border-2 p-4" :style="{ borderColor: selectedType.color, backgroundColor: selectedType.color + '0d' }">
             <div
               class="flex size-11 items-center justify-center rounded-xl text-lg font-extrabold"
-              :style="{ backgroundColor: selectedType.color + '22', color: selectedType.color }"
+              :style="{ backgroundColor: selectedType.color + '22', color: readable(selectedType.color) }"
             >
               {{ selectedType.code }}
             </div>

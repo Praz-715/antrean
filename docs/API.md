@@ -206,7 +206,7 @@ Butuh sesi + permission `queue.*`. Operator hanya dapat menyentuh jenis antrean 
 | `GET /api/operator/workspace` | Daftar penugasan (layanan + loket + event) |
 | `GET /api/operator/board?queueTypeId=` | Papan kerja: sedang dilayani, menunggu, dilewati, riwayat, statistik |
 | `POST /api/operator/queue/next` | Panggil antrean berikutnya |
-| `POST /api/operator/queue/{id}/call` | Panggil nomor tertentu (termasuk yang SKIPPED) |
+| `POST /api/operator/queue/{id}/call` | Panggil nomor tertentu (termasuk yang SKIPPED); `{ "priority": true }` menandainya prioritas |
 | `POST /api/operator/queue/{id}/recall` | Panggil ulang |
 | `POST /api/operator/queue/{id}/serving` | Tandai mulai dilayani |
 | `POST /api/operator/queue/{id}/skip` | Lewati |
@@ -222,6 +222,25 @@ Butuh sesi + permission `queue.*`. Operator hanya dapat menyentuh jenis antrean 
 
 Menekan `next` juga menutup antrean yang sedang dilayani operator tersebut sebagai `COMPLETED`
 (waktu layanan dicatat), lalu memanggil antrean menunggu berikutnya.
+
+**`POST /api/operator/queue/{id}/call` — panggilan prioritas**
+
+```json
+{ "counterId": "01M1…", "priority": true }
+```
+
+`priority: true` menaikkan `queues.priority` ke 10 (`QUEUE_PRIORITY.PRIORITY`) sekaligus memanggil
+nomornya. Akibatnya:
+
+- payload siaran `queue.called` membawa `priority`, dan layar menampilkan penanda **PRIORITAS**;
+- pengumuman suara menyebut "Antrean prioritas" sebelum nomornya;
+- penandaannya tersimpan, jadi ikut terlihat di riwayat antrean dan ekspor.
+
+Yang **tidak** berubah: urutan NEXT untuk nomor itu. Kolom `priority` memang kunci urutan pertama
+NEXT (`ORDER BY priority DESC, sequence_number ASC`), tetapi hanya berlaku bagi antrean yang masih
+`WAITING` — sedangkan penandaan di sini terjadi tepat saat nomornya dipanggil. Panggilan biasa tidak
+pernah menurunkan prioritas yang sudah ada (`GREATEST`), jadi memanggil ulang nomor prioritas tetap
+mempertahankan penandanya.
 
 Transisi status yang sah:
 
@@ -263,6 +282,7 @@ Butuh sesi + permission sesuai modul.
 | `POST /api/admin/queue-types/reorder` | `queue_type.manage` |
 | `GET/POST /api/admin/counters` | `queue_type.view` / `counter.manage` |
 | `PATCH/DELETE /api/admin/counters/{id}` | `counter.manage` |
+| `PUT /api/admin/counters/{id}/services` | `counter.manage` |
 
 Format nomor mendukung placeholder `{prefix}` `{code}` `{seq}` `{yyyy}` `{mm}` `{dd}`,
 mis. `{prefix}{seq}` → `A001`, `{code}-{seq}` → `UM-001`.
@@ -278,6 +298,51 @@ mis. `{prefix}{seq}` → `A001`, `{code}-{seq}` → `UM-001`.
 | `GET /api/admin/assignments` | `assignment.manage` / `user.view` |
 | `POST /api/admin/assignments` | `assignment.manage` |
 | `DELETE /api/admin/assignments/{id}` | `assignment.manage` |
+| `GET /api/admin/assignments/candidates?eventId=` | `assignment.manage` / `user.view` |
+
+**Operator → loket, loket → layanan (§12, §28).**
+
+Cakupan operator TIDAK disimpan per jenis antrean. Ia didudukkan di **satu loket**, dan loket
+itulah yang menentukan layanan apa saja yang ia tangani:
+
+```
+PUT /api/admin/counters/{id}/services   { "queueTypeIds": ["01…A", "01…C"] }
+POST /api/admin/assignments             { "userId": "01…", "counterId": "01…" }
+```
+
+Karena loket dimiliki satu event, "satu operator satu event" terjaga oleh struktur — bukan oleh
+pemeriksaan tambahan. Menambah layanan pada loket langsung berlaku bagi semua operator yang
+duduk di sana.
+
+Penolakan yang mungkin muncul:
+
+| `code` | Kapan | Jalan keluar |
+|---|---|---|
+| `COUNTER_HAS_NO_SERVICE` | Loket tujuan belum melayani jenis antrean apa pun, **atau** layanan loket dikosongkan padahal masih ada operator di sana | Atur layanan loket lebih dulu / pindahkan operatornya |
+| `OPERATOR_ALREADY_SEATED` | Operator sudah duduk di loket lain | Kirim `moveFromOtherCounter: true` |
+| `CONFLICT` | Operator masih memegang antrean `CALLED`/`SERVING` | Selesaikan antreannya dulu — jangan mencabut orang yang sedang melayani |
+
+```json
+{
+  "success": false,
+  "code": "OPERATOR_ALREADY_SEATED",
+  "message": "Operator ini sudah duduk di loket \"Loket 1\" pada event \"Demo Service\". Satu operator hanya melayani satu event — pilih \"pindahkan\" bila memang ingin dipindahkan."
+}
+```
+
+`GET …/candidates?eventId=` mengembalikan calon operator beserta tempat duduknya sekarang, supaya
+antarmuka bisa memberi tahu SEBELUM admin menekan simpan:
+
+```json
+[{ "id": "01M1…", "name": "Budi", "email": "budi@…", "isActive": true,
+   "seatedAt": { "counter": { "id": "01L1…", "code": "L1", "name": "Loket 1" },
+                 "event": { "id": "01M2…", "name": "Demo Service", "status": "OPEN" } },
+   "seatedHere": false,
+   "assignedEvent": { "id": "01M2…", "name": "Demo Service", "status": "OPEN" } }]
+```
+
+`GET /api/admin/assignments` mengembalikan satu baris per operator: `{ id, user, counter, event, services }` —
+`services` diturunkan dari loket, jadi tidak ada baris terpisah per layanan lagi.
 
 Reset kata sandi mencabut seluruh sesi aktif pengguna tersebut.
 
@@ -578,3 +643,17 @@ ada pengguna yang memakainya. Perubahan izin membuang cache konteks auth sehingg
 Menjalankan satu putaran penyelarasan status event dengan jadwalnya (§10) sekarang juga. Penjadwal
 sendiri berjalan tiap menit di dalam proses; endpoint ini untuk penyelarasan seketika dan pengujian.
 Operasinya idempoten.
+
+```json
+{
+  "checked": 5,
+  "opened": [{ "eventId": "01M1…", "name": "Poli Umum" }],
+  "closed": [{ "eventId": "01M2…", "name": "Poli Gigi", "status": "SCHEDULED" }],
+  "at": "2026-09-08T09:05:00.000Z"
+}
+```
+
+Perhatikan `closed[].status`: penutupan **harian** menghasilkan `SCHEDULED` ("menunggu jadwal
+berikutnya"), sedangkan `CLOSED` hanya untuk event yang melewati tanggal berakhirnya atau tidak
+punya hari layanan lain. Event yang sudah `CLOSED` tidak pernah dibuka lagi oleh penjadwal, jadi
+penutupan manual oleh admin tetap dihormati.

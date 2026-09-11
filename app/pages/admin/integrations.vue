@@ -320,7 +320,7 @@ const authLabel: Record<string, string> = {
               [{ label: 'Hapus', icon: 'i-lucide-trash-2', color: 'error' as const, onSelect: () => (deleteTarget = item) }],
             ]"
           >
-            <UButton icon="i-lucide-ellipsis-vertical" variant="ghost" color="neutral" size="xs" />
+            <UButton icon="i-lucide-ellipsis-vertical" aria-label="Menu tindakan" title="Menu tindakan" variant="ghost" color="neutral" size="xs" />
           </UDropdownMenu>
         </div>
 
@@ -362,7 +362,7 @@ const authLabel: Record<string, string> = {
           HTTP {{ testResult.status || '—' }} · {{ testResult.durationMs }} ms
           <template v-if="testResult.addresses.length"> · {{ testResult.addresses.join(', ') }}</template>
         </span>
-        <UButton class="ml-auto" size="xs" variant="ghost" color="neutral" icon="i-lucide-x" @click="testResult = null" />
+        <UButton class="ml-auto" size="xs" variant="ghost" color="neutral" icon="i-lucide-x" aria-label="Tutup hasil uji" title="Tutup hasil uji" @click="testResult = null" />
       </div>
 
       <p v-if="testResult.error" class="mt-2 text-sm text-rose-700 dark:text-rose-300">
@@ -511,7 +511,7 @@ const authLabel: Record<string, string> = {
               <div v-for="(pair, index) in headerPairs" :key="index" class="mb-2 flex gap-2">
                 <UInput v-model="pair.key" class="flex-1" placeholder="Nama" size="sm" />
                 <UInput v-model="pair.value" class="flex-1" placeholder="Nilai" size="sm" />
-                <UButton size="xs" variant="ghost" color="error" icon="i-lucide-x" @click="headerPairs.splice(index, 1)" />
+                <UButton size="xs" variant="ghost" color="error" icon="i-lucide-x" aria-label="Hapus header" title="Hapus header" @click="headerPairs.splice(index, 1)" />
               </div>
             </div>
 
@@ -528,7 +528,7 @@ const authLabel: Record<string, string> = {
               <div v-for="(pair, index) in queryPairs" :key="index" class="mb-2 flex gap-2">
                 <UInput v-model="pair.key" class="flex-1" placeholder="nama" size="sm" />
                 <UInput v-model="pair.value" class="flex-1" placeholder="{lookup}" size="sm" />
-                <UButton size="xs" variant="ghost" color="error" icon="i-lucide-x" @click="queryPairs.splice(index, 1)" />
+                <UButton size="xs" variant="ghost" color="error" icon="i-lucide-x" aria-label="Hapus parameter" title="Hapus parameter" @click="queryPairs.splice(index, 1)" />
               </div>
             </div>
           </div>
@@ -570,7 +570,7 @@ const authLabel: Record<string, string> = {
                 :items="TRANSFORMS.map(t => ({ label: t, value: t as string }))"
                 @update:model-value="(v: string) => (mapping.transform = v)"
               />
-              <UButton size="xs" variant="ghost" color="error" icon="i-lucide-x" @click="mappings.splice(index, 1)" />
+              <UButton size="xs" variant="ghost" color="error" icon="i-lucide-x" aria-label="Hapus pemetaan" title="Hapus pemetaan" @click="mappings.splice(index, 1)" />
             </div>
           </div>
         </div>

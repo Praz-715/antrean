@@ -11,6 +11,7 @@ export interface BroadcastableQueue {
   organizationId: string
   publicToken: string
   recallCount: number
+  priority: number
   serviceDate: Date
   calledAt: Date | null
   queueType: { id: string, code: string, name: string, color: string }
@@ -35,6 +36,7 @@ export function toBroadcastPayload(queue: BroadcastableQueue): QueueBroadcastPay
     visitorName: queue.visitor?.fullName ?? null,
     calledAt: queue.calledAt ? queue.calledAt.toISOString() : null,
     recallCount: queue.recallCount,
+    priority: queue.priority,
     serviceDate: formatServiceDate(queue.serviceDate),
   }
 }

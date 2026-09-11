@@ -175,6 +175,8 @@ async function confirmDelete() {
           >
             <UButton
               icon="i-lucide-ellipsis-vertical"
+              aria-label="Menu tindakan event"
+              title="Menu tindakan event"
               variant="ghost"
               color="neutral"
               size="xs"

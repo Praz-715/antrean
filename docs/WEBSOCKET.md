@@ -64,7 +64,7 @@ di tempat lain.
 | Event | Kapan |
 |---|---|
 | `queue.created` | Pengunjung mengambil nomor |
-| `queue.called` | Operator memanggil (NEXT atau panggil spesifik) |
+| `queue.called` | Operator memanggil (NEXT atau panggil spesifik); `priority` pada payload menandai panggilan prioritas |
 | `queue.recalled` | Operator menekan panggil ulang |
 | `queue.serving` | Antrean ditandai sedang dilayani |
 | `queue.skipped` | Antrean dilewati |
@@ -157,6 +157,8 @@ transaksi yang akhirnya di-rollback.
 - **Fallback polling** aktif saat socket terputus: display tiap 10 detik, pengunjung tiap 15 detik.
 - **Heartbeat** `display:ping` tiap 10 detik saat tersambung, sehingga admin melihat status
   ONLINE/OFFLINE beserta waktu terakhir terlihat.
+- **Layar penuh** disediakan lewat tombol pada bilah bawah display (`useFullscreen()`). Statusnya
+  dibaca dari event `fullscreenchange`, jadi keluar lewat Esc pun membuat label tombol ikut berubah.
 
 ---
 

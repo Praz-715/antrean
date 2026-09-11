@@ -286,7 +286,15 @@ export const queueService = {
         orderBy: { lastCalledAt: 'desc' },
         select: { queueNumber: true, counter: { select: { name: true } } },
       }),
-      prisma.operatorAssignment.count({ where: { queueTypeId: queue.queueTypeId } }),
+      /**
+       * Jumlah operator yang benar-benar bisa melayani antrean ini = operator yang
+       * duduk di loket yang melayani jenis antrean tersebut. Dipakai membagi
+       * perkiraan waktu tunggu, jadi angkanya harus mencerminkan loket, bukan
+       * daftar penugasan lama.
+       */
+      prisma.operatorAssignment.count({
+        where: { counter: { services: { some: { queueTypeId: queue.queueTypeId } } } },
+      }),
     ])
 
     const isWaiting = queue.status === 'WAITING'
@@ -370,6 +378,7 @@ export const queueService = {
           queueNumber: true,
           status: true,
           recallCount: true,
+          priority: true,
           lastCalledAt: true,
           counter: { select: { code: true, name: true } },
         },
@@ -427,6 +436,7 @@ export const queueService = {
               queueNumber: current.queueNumber,
               status: current.status,
               recallCount: current.recallCount,
+              priority: current.priority,
               lastCalledAt: current.lastCalledAt,
               counter: current.counter,
             }

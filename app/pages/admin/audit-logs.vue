@@ -39,23 +39,37 @@ const page = ref(1)
 const data = ref<AuditResponse | null>(null)
 const pending = ref(false)
 
+function buildQuery() {
+  return {
+    ...(filterValue(action.value) ? { action: action.value } : {}),
+    ...(filterValue(entity.value) ? { entity: entity.value } : {}),
+    ...(filterValue(userId.value) ? { userId: userId.value } : {}),
+    ...(search.value ? { search: search.value } : {}),
+    page: page.value,
+    perPage: 50,
+  }
+}
+
 async function load() {
   pending.value = true
   try {
-    data.value = await apiFetch<AuditResponse>('/api/admin/audit-logs', {
-      query: {
-        ...(filterValue(action.value) ? { action: action.value } : {}),
-        ...(filterValue(entity.value) ? { entity: entity.value } : {}),
-        ...(filterValue(userId.value) ? { userId: userId.value } : {}),
-        ...(search.value ? { search: search.value } : {}),
-        page: page.value,
-        perPage: 50,
-      },
-    })
+    data.value = await apiFetch<AuditResponse>('/api/admin/audit-logs', { query: buildQuery() })
   }
   finally { pending.value = false }
 }
-await load()
+
+/**
+ * Muat pertama lewat `useAsyncData` — bukan `load()` langsung.
+ *
+ * Hasilnya ikut terkirim sebagai payload SSR dan dipakai ulang saat hidrasi. Kalau
+ * klien mengambil ulang sendiri, daftarnya sudah berbeda dari yang dirender server
+ * (audit log bertambah tiap ada aktivitas), dan Vue melaporkannya sebagai hydration
+ * mismatch lalu membuang DOM yang sudah jadi. Halaman inilah yang paling terasa
+ * karena isinya berubah setiap detik.
+ */
+const { data: initial } = await useAsyncData('admin-audit-logs', () =>
+  apiFetch<AuditResponse>('/api/admin/audit-logs', { query: buildQuery() }))
+data.value = initial.value ?? null
 
 watch([action, entity, userId], () => { page.value = 1; void load() })
 watch(page, load)
@@ -101,7 +115,7 @@ function hasDiff(row: AuditRow) {
       :description="data ? `${data.total.toLocaleString('id-ID')} aktivitas tercatat` : 'Jejak seluruh aktivitas penting di sistem.'"
     >
       <template #actions>
-        <UButton icon="i-lucide-refresh-cw" variant="outline" color="neutral" :loading="pending" @click="load" />
+        <UButton icon="i-lucide-refresh-cw" aria-label="Muat ulang data" title="Muat ulang data" variant="outline" color="neutral" :loading="pending" @click="load" />
       </template>
     </UiPageHeading>
 
@@ -211,8 +225,8 @@ function hasDiff(row: AuditRow) {
         Halaman {{ data.page }} dari {{ data.totalPages }}
       </p>
       <div class="flex gap-2">
-        <UButton size="sm" variant="outline" color="neutral" icon="i-lucide-chevron-left" :disabled="page <= 1" @click="page--" />
-        <UButton size="sm" variant="outline" color="neutral" icon="i-lucide-chevron-right" :disabled="page >= data.totalPages" @click="page++" />
+        <UButton size="sm" variant="outline" color="neutral" icon="i-lucide-chevron-left" aria-label="Halaman sebelumnya" title="Halaman sebelumnya" :disabled="page <= 1" @click="page--" />
+        <UButton size="sm" variant="outline" color="neutral" icon="i-lucide-chevron-right" aria-label="Halaman berikutnya" title="Halaman berikutnya" :disabled="page >= data.totalPages" @click="page++" />
       </div>
     </div>
 

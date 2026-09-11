@@ -19,6 +19,8 @@ interface Announcement {
 
 const { can } = useMe()
 const { call } = useApi()
+// Waktu acuan bersama SSR & klien (lihat useNow) agar label waktu tidak mismatch.
+const now = useNow()
 const { currentId, loadEvents } = useCurrentEvent()
 await loadEvents()
 
@@ -114,12 +116,17 @@ function scheduleLabel(item: Announcement) {
   return 'Selalu tampil'
 }
 
-/** Sedang benar-benar tampil di layar saat ini? */
+/**
+ * Sedang benar-benar tampil di layar saat ini?
+ *
+ * Memakai waktu acuan bersama: bila jadwalnya berakhir tepat di antara render server
+ * dan hidrasi klien, lencana serta kelasnya akan berbeda dan memicu mismatch.
+ */
 function isLive(item: Announcement) {
   if (!item.isActive) return false
-  const now = Date.now()
-  if (item.startsAt && new Date(item.startsAt).getTime() > now) return false
-  if (item.endsAt && new Date(item.endsAt).getTime() < now) return false
+  const at = now.value
+  if (item.startsAt && new Date(item.startsAt).getTime() > at) return false
+  if (item.endsAt && new Date(item.endsAt).getTime() < at) return false
   return true
 }
 
@@ -221,7 +228,7 @@ const runningPreview = computed(() =>
             [{ label: 'Hapus', icon: 'i-lucide-trash-2', color: 'error' as const, onSelect: () => (deleteTarget = item) }],
           ]"
         >
-          <UButton icon="i-lucide-ellipsis-vertical" variant="ghost" color="neutral" size="xs" />
+          <UButton icon="i-lucide-ellipsis-vertical" aria-label="Menu tindakan" title="Menu tindakan" variant="ghost" color="neutral" size="xs" />
         </UDropdownMenu>
       </div>
     </div>

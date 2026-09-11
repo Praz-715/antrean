@@ -123,7 +123,14 @@ async function joinUser(socket: Socket, handshake: HandshakeAuth) {
     select: {
       id: true,
       organizationId: true,
-      assignments: { select: { queueTypeId: true, eventId: true } },
+      // Room realtime mengikuti loket: layanan apa saja yang dilayaninya, dan event-nya.
+      assignment: {
+        select: {
+          counter: {
+            select: { eventId: true, services: { select: { queueTypeId: true } } },
+          },
+        },
+      },
       userRoles: { select: { role: { select: { key: true } } } },
     },
   })
@@ -131,9 +138,13 @@ async function joinUser(socket: Socket, handshake: HandshakeAuth) {
 
   if (user.organizationId) await socket.join(ROOMS.admin(user.organizationId))
 
-  for (const assignment of user.assignments) {
-    await socket.join(ROOMS.queueType(assignment.queueTypeId))
-    await socket.join(ROOMS.event(assignment.eventId))
+  // Operator mengikuti seluruh layanan loketnya, plus kanal event pemilik loket.
+  const seat = user.assignment?.counter
+  if (seat) {
+    await socket.join(ROOMS.event(seat.eventId))
+    for (const service of seat.services) {
+      await socket.join(ROOMS.queueType(service.queueTypeId))
+    }
   }
 
   const isPrivileged = user.userRoles.some(r => ['SUPERADMIN', 'ADMIN', 'VIEWER'].includes(r.role.key))

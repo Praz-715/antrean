@@ -12,6 +12,33 @@ const form = reactive({ email: '', password: '' })
 const loading = ref(false)
 const errorMessage = ref('')
 
+/**
+ * Terjemahkan galat dari Better Auth.
+ *
+ * Pesan bawaannya berbahasa Inggris ("Too many requests. Please try again later."),
+ * dan sebelumnya diteruskan apa adanya ke pengguna — janggal pada antarmuka yang
+ * seluruhnya berbahasa Indonesia, dan justru pada saat pengguna paling butuh
+ * penjelasan yang jelas.
+ */
+function loginErrorMessage(error: { message?: string, status?: number }) {
+  if (error.status === 429 || /too many requests/i.test(error.message ?? '')) {
+    return 'Terlalu banyak percobaan masuk. Tunggu sebentar, lalu coba lagi.'
+  }
+  if (/invalid email or password/i.test(error.message ?? '')) {
+    return 'Email atau kata sandi salah'
+  }
+  if (/user not found/i.test(error.message ?? '')) {
+    return 'Akun dengan email tersebut tidak ditemukan'
+  }
+  if (/email not verified/i.test(error.message ?? '')) {
+    return 'Email Anda belum diverifikasi'
+  }
+  if (/failed to fetch|network/i.test(error.message ?? '')) {
+    return 'Tidak dapat terhubung ke server. Periksa koneksi Anda.'
+  }
+  return error.message || 'Gagal masuk. Coba lagi.'
+}
+
 async function onSubmit() {
   if (loading.value) return
   errorMessage.value = ''
@@ -20,9 +47,7 @@ async function onSubmit() {
   const { error } = await signIn.email({ email: form.email.trim(), password: form.password })
 
   if (error) {
-    errorMessage.value = error.message === 'Invalid email or password'
-      ? 'Email atau kata sandi salah'
-      : (error.message || 'Gagal masuk. Coba lagi.')
+    errorMessage.value = loginErrorMessage(error)
     loading.value = false
     return
   }

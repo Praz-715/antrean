@@ -11,6 +11,7 @@ export async function resetDatabase() {
     'visitor_field_values',
     'visitors',
     'operator_assignments',
+    'counter_services',
     'form_fields',
     'form_definitions',
     'qr_codes',
@@ -46,12 +47,15 @@ export async function makeOrganization(timezone = 'Asia/Jakarta') {
   })
 }
 
-export async function makeEvent(organizationId: string, overrides: Partial<{ timezone: string, status: 'OPEN' | 'CLOSED' | 'PAUSED' | 'DRAFT' }> = {}) {
+export async function makeEvent(
+  organizationId: string,
+  overrides: Partial<{ name: string, timezone: string, status: 'OPEN' | 'CLOSED' | 'PAUSED' | 'DRAFT' }> = {},
+) {
   const event = await prisma.event.create({
     data: {
       id: ulid(),
       organizationId,
-      name: 'Test Event',
+      name: overrides.name ?? 'Test Event',
       slug: `test-event-${ulid().slice(-6).toLowerCase()}`,
       status: overrides.status ?? 'OPEN',
       timezone: overrides.timezone ?? 'Asia/Jakarta',
@@ -111,8 +115,31 @@ export async function makeUser(organizationId: string, name = 'Operator Uji') {
   })
 }
 
-export async function assignOperator(userId: string, eventId: string, queueTypeId: string, counterId?: string) {
-  return prisma.operatorAssignment.create({
-    data: { id: ulid(), userId, eventId, queueTypeId, counterId: counterId ?? null, isDefault: true },
+/** Tetapkan layanan yang dilayani sebuah loket (§12). */
+export async function serveQueueTypes(counterId: string, queueTypeIds: string[]) {
+  await prisma.counterService.deleteMany({ where: { counterId } })
+  await prisma.counterService.createMany({
+    data: queueTypeIds.map((queueTypeId, index) => ({
+      id: ulid(),
+      counterId,
+      queueTypeId,
+      displayOrder: index,
+    })),
+  })
+}
+
+/**
+ * Dudukkan operator di sebuah loket, sekaligus memastikan loket itu melayani
+ * jenis antrean yang disebut.
+ *
+ * Cakupan operator kini diturunkan dari loket (§28), jadi helper ini menyiapkan
+ * keduanya — sebab keduanya memang harus ada agar operator bisa bekerja.
+ */
+export async function seatOperator(userId: string, counterId: string, queueTypeIds: string[]) {
+  await serveQueueTypes(counterId, queueTypeIds)
+  return prisma.operatorAssignment.upsert({
+    where: { userId },
+    update: { counterId },
+    create: { id: ulid(), userId, counterId },
   })
 }

@@ -90,11 +90,18 @@ async function setupFixture() {
     eventId, code: 'UL1', name: 'Loket Uji', isActive: true, displayOrder: 1,
   })).data
 
-  const users = await api('GET', '/api/admin/users')
-  const operator = users.data.users.find(u => u.email === 'operator1@antrean.local')
-  await api('POST', '/api/admin/assignments', {
-    userId: operator.id, eventId, queueTypeId: queueType.id, counterId: counter.id, isDefault: false,
-  })
+  const operatorEmail = `op.uji.${stamp}@antrean.local`
+  const roles = (await api('GET', '/api/admin/users')).data.roles
+  const operator = (await api('POST', '/api/admin/users', {
+    name: `Operator Uji ${stamp}`,
+    email: operatorEmail,
+    password: 'password123',
+    roleId: roles.find(r => r.key === 'OPERATOR').id,
+    isActive: true,
+  })).data
+  // Layanan melekat pada loket; operator mewarisinya dengan duduk di sana (§28).
+  await api('PUT', `/api/admin/counters/${counter.id}/services`, { queueTypeIds: [queueType.id] })
+  await api('POST', '/api/admin/assignments', { userId: operator.id, counterId: counter.id })
 
   const form = (await api('POST', '/api/admin/forms', { eventId, name: 'Form Uji' })).data
   await api('PUT', `/api/admin/forms/${form.id}/fields`, {
@@ -118,6 +125,9 @@ async function setupFixture() {
     eventId,
     queueType,
     counter,
+    // Operator milik event ini sendiri (§28) — bukan operator demo bersama.
+    operatorEmail,
+    operatorId: operator.id,
     publishCode: publicPage.publishCode,
     deviceCode: display.deviceCode,
   }
@@ -149,6 +159,45 @@ async function main() {
         ? 'socket tersambung memakai token tersimpan'
         : (await page.locator('header').innerText()).replace(/\s+/g, ' ').slice(0, 80))
 
+    // ---- 2b. tombol layar penuh (§17) ----
+    /**
+     * Layar antrean dipasang di televisi, jadi tombol ini bagian dari pemasangan.
+     * Keluarnya diuji lewat `exitFullscreen()` — bukan tombol — karena begitulah
+     * yang terjadi saat pengguna menekan Esc: statusnya harus ikut tersinkron dari
+     * event `fullscreenchange`, bukan dari klik.
+     */
+    const fsButton = page.getByRole('button', { name: /layar penuh/i }).first()
+    let fullscreenOk = false
+    if (await fsButton.count()) {
+      /**
+       * Labelnya DITUNGGU, bukan dibaca sekali: status fullscreen peramban berubah
+       * lebih dulu daripada render Vue berikutnya, jadi pembacaan langsung setelah
+       * `exitFullscreen()` masih menangkap label lama.
+       */
+      const labelOf = async () => (await fsButton.textContent())?.trim() ?? ''
+
+      await fsButton.click()
+      const entered = await waitFor(async () => page.evaluate(() => !!document.fullscreenElement), 8_000)
+      const labelIn = await waitFor(async () => /keluar/i.test(await labelOf()), 8_000)
+
+      await page.evaluate(() => document.exitFullscreen()).catch(() => {})
+      const exited = await waitFor(async () => page.evaluate(() => !document.fullscreenElement), 8_000)
+      const labelOut = await waitFor(async () => !/keluar/i.test(await labelOf()), 8_000)
+
+      fullscreenOk = entered && exited && labelIn && labelOut
+    }
+    record('display bisa masuk & keluar layar penuh', fullscreenOk,
+      fullscreenOk ? 'label ikut berubah mengikuti status peramban' : 'tombol tidak ada atau status tidak tersinkron')
+
+    // ---- 2c. panggilan prioritas tampil khusus di layar (§57) ----
+    /**
+     * Penandanya dicari lewat `data-priority-badge`, bukan teks: badge memuat ikon,
+     * jadi pencocokan berbasis teks daun akan melewatkannya — persis kesalahan yang
+     * sempat membuat fitur ini tampak tidak jalan padahal sudah benar.
+     */
+    const priorityBadges = () => page.locator('[data-priority-badge]').count()
+    const badgeBeforePriority = await priorityBadges()
+
     // ---- 3. pengunjung mengambil antrean ----
     const visitor = await context.newPage()
     await visitor.goto(`${BASE}/p/${fx.publishCode}`, { waitUntil: 'domcontentloaded' })
@@ -170,7 +219,7 @@ async function main() {
       (ticketText.match(/U\d{3}/) ?? ['tidak ada nomor'])[0])
 
     // ---- 4. operator memanggil → layar & tiket ikut berubah ----
-    await login('operator1@antrean.local')
+    await login(fx.operatorEmail)
     const next = await api('POST', '/api/operator/queue/next', {
       queueTypeId: fx.queueType.id, counterId: fx.counter.id,
     })
@@ -180,6 +229,10 @@ async function main() {
       ? await waitFor(async () => (await page.locator('main').innerText()).includes(called))
       : false
     record('nomor dipanggil muncul di layar tanpa reload', onDisplay, called ?? next.message)
+
+    record('panggilan biasa TIDAK menampilkan penanda prioritas',
+      (await priorityBadges()) === badgeBeforePriority,
+      `${await priorityBadges()} penanda di layar`)
 
     const onTicket = called
       ? await waitFor(async () => (await visitor.locator('body').innerText()).toLowerCase().includes('dipanggil'))
@@ -270,12 +323,50 @@ async function main() {
     record('pengumuman muncul di teks berjalan display', onFooter,
       onFooter ? 'tanpa reload' : announcement.message)
 
+    // ---- 8. panggilan prioritas: penanda khusus di layar (§57) ----
+    const extra = await api('POST', `/api/public/${fx.publishCode}/queue`, {
+      queueTypeId: fx.queueType.id,
+      values: { full_name: 'Pengunjung Prioritas' },
+    })
+    const priorityQueueId = extra.data?.token
+      ? (await api('GET', `/api/admin/queues?eventId=${fx.eventId}&perPage=50`))
+          .data.items.find(q => q.queueNumber === extra.data.queueNumber)?.id
+      : null
+
+    let priorityOk = false
+    if (priorityQueueId) {
+      await login(fx.operatorEmail)
+      const prio = await api('POST', `/api/operator/queue/${priorityQueueId}/call`, {
+        counterId: fx.counter.id,
+        priority: true,
+      })
+      priorityOk = prio.success
+        && prio.data?.priority >= 10
+        && await waitFor(async () => (await priorityBadges()) > badgeBeforePriority, 15_000)
+    }
+    record('panggilan prioritas menampilkan penanda khusus di layar', priorityOk,
+      priorityOk ? `${extra.data?.queueNumber} ditandai PRIORITAS tanpa reload` : 'penanda tidak muncul')
+
     await visitor.close()
   }
   finally {
     await browser.close()
     await login('superadmin@antrean.local').catch(() => {})
+
+    /**
+     * Antrean aktif dibatalkan lebih dulu — event yang masih punya antrean berjalan
+     * memang tidak boleh dihapus, dan tanpa langkah ini tiap jalan uji meninggalkan
+     * event menggantung. Operator uji ikut dihapus supaya daftar pengguna tidak
+     * menumpuk.
+     */
+    const leftovers = await api('GET', `/api/admin/queues?eventId=${fx.eventId}&perPage=200`).catch(() => null)
+    for (const q of leftovers?.data?.items ?? []) {
+      if (['WAITING', 'CALLED', 'SERVING'].includes(q.status)) {
+        await api('POST', `/api/operator/queue/${q.id}/cancel`, { reason: 'Pembersihan uji' }).catch(() => {})
+      }
+    }
     await api('DELETE', `/api/admin/events/${fx.eventId}`).catch(() => {})
+    if (fx.operatorId) await api('DELETE', `/api/admin/users/${fx.operatorId}`).catch(() => {})
   }
 
   const failed = results.filter(r => !r.ok)

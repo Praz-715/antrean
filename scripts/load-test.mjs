@@ -95,6 +95,8 @@ async function main() {
   await api('POST', `/api/admin/public-pages/${page.id}/publish`, { isPublished: true })
 
   const sockets = []
+  /** Operator uji yang dibuat skrip ini — dihapus lagi saat bersih-bersih. */
+  const createdOperatorIds = []
   try {
     // ---------- 1. Sambungkan display ----------
     console.log(`Memasangkan & menyambungkan ${TOTAL_DISPLAYS} display…`)
@@ -172,14 +174,22 @@ async function main() {
 
     // ---------- 4. Sebaran broadcast ke display ----------
     console.log(`\nMengukur penyebaran panggilan ke ${connected} display…`)
-    const users = await api('GET', '/api/admin/users')
-    const operator = users.data.users.find(u => u.email === 'operator1@antrean.local')
-    await api('POST', '/api/admin/assignments', {
-      userId: operator.id, eventId, queueTypeId: queueTypes[0].id, counterId: counter.id,
-    })
+    // Operator khusus untuk event uji ini (§28: satu operator satu event).
+    const operatorEmail = `op.uji.${stamp}@antrean.local`
+    const operatorRoleId = (await api('GET', '/api/admin/users')).data.roles.find(r => r.key === 'OPERATOR').id
+    const operator = (await api('POST', '/api/admin/users', {
+      name: `Operator Uji ${stamp}`,
+      email: operatorEmail,
+      password: 'password123',
+      roleId: operatorRoleId,
+      isActive: true,
+    })).data
+    createdOperatorIds.push(operator.id)
+    await api('PUT', `/api/admin/counters/${counter.id}/services`, { queueTypeIds: [queueTypes[0].id] })
+    await api('POST', '/api/admin/assignments', { userId: operator.id, counterId: counter.id })
 
     const adminCookie = cookie
-    await api('POST', '/api/auth/sign-in/email', { email: 'operator1@antrean.local', password: 'password123' })
+    await api('POST', '/api/auth/sign-in/email', { email: operatorEmail, password: 'password123' })
     received.length = 0
     const callStart = Date.now()
     const called = await api('POST', '/api/operator/queue/next', { queueTypeId: queueTypes[0].id, counterId: counter.id })
@@ -207,7 +217,33 @@ async function main() {
   finally {
     for (const socket of sockets) socket.close()
     await api('POST', '/api/auth/sign-in/email', { email: 'superadmin@antrean.local', password: 'password123' }).catch(() => {})
-    await api('DELETE', `/api/admin/events/${eventId}`).catch(() => {})
+
+    /**
+     * Antrean aktif harus dibatalkan lebih dulu.
+     *
+     * Event yang masih punya antrean WAITING/CALLED/SERVING menolak dihapus (memang
+     * begitu seharusnya), dan uji ini menerbitkan ribuan antrean — tanpa langkah ini
+     * event uji beban tertinggal di database beserta seluruh antreannya.
+     */
+    let cleared = 0
+    for (;;) {
+      const batch = await api('GET', `/api/admin/queues?eventId=${eventId}&perPage=200`).catch(() => null)
+      const active = (batch?.data?.items ?? []).filter(q => ['WAITING', 'CALLED', 'SERVING'].includes(q.status))
+      if (!active.length) break
+      for (let i = 0; i < active.length; i += 25) {
+        await Promise.all(active.slice(i, i + 25).map(q =>
+          api('POST', `/api/operator/queue/${q.id}/cancel`, { reason: 'Pembersihan uji beban' }).catch(() => {})))
+      }
+      cleared += active.length
+      process.stdout.write(`\r  membatalkan antrean uji: ${cleared}`)
+    }
+    if (cleared) console.log(`\r  membatalkan antrean uji: ${cleared} selesai`)
+
+    for (const operatorId of createdOperatorIds) {
+      await api('DELETE', `/api/admin/users/${operatorId}`).catch(() => {})
+    }
+    const removed = await api('DELETE', `/api/admin/events/${eventId}`).catch(() => null)
+    console.log(removed?.success ? '  event uji dihapus' : '  ⚠️  event uji GAGAL dihapus — periksa manual')
   }
 }
 

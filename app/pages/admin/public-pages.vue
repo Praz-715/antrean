@@ -275,8 +275,8 @@ const captchaConfigured = computed(() => !!useRuntimeConfig().public.turnstileSi
         <div class="mt-4 flex items-center gap-2 rounded-lg bg-slate-50 p-2 dark:bg-slate-800/50">
           <UIcon name="i-lucide-link" class="size-4 shrink-0 text-slate-400" />
           <code class="min-w-0 flex-1 truncate text-xs">{{ page.url }}</code>
-          <UButton icon="i-lucide-copy" size="xs" variant="ghost" color="neutral" @click="copyUrl(page.url)" />
-          <UButton icon="i-lucide-external-link" size="xs" variant="ghost" color="neutral" :to="page.url" target="_blank" />
+          <UButton icon="i-lucide-copy" aria-label="Salin tautan halaman" title="Salin tautan halaman" size="xs" variant="ghost" color="neutral" @click="copyUrl(page.url)" />
+          <UButton icon="i-lucide-external-link" aria-label="Buka halaman publik" title="Buka halaman publik" size="xs" variant="ghost" color="neutral" :to="page.url" target="_blank" />
         </div>
 
         <div class="mt-3 flex flex-wrap gap-3 text-xs text-slate-500">
@@ -308,7 +308,7 @@ const captchaConfigured = computed(() => !!useRuntimeConfig().public.turnstileSi
               [{ label: 'Hapus', icon: 'i-lucide-trash-2', color: 'error' as const, onSelect: () => (deleteTarget = page) }],
             ]"
           >
-            <UButton size="sm" icon="i-lucide-ellipsis-vertical" variant="ghost" color="neutral" />
+            <UButton size="sm" icon="i-lucide-ellipsis-vertical" aria-label="Menu tindakan" title="Menu tindakan" variant="ghost" color="neutral" />
           </UDropdownMenu>
         </div>
       </div>

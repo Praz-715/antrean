@@ -177,14 +177,33 @@ async function main() {
     return 'berhasil masuk'
   })
 
-  // --- assignment ---
-  await check('POST /api/admin/assignments', async () => {
+  // --- layanan loket & penempatan operator ---
+  // Layanan melekat pada LOKET; operator mewarisinya dengan duduk di sana (§12, §28).
+  await check('PUT /api/admin/counters/{id}/services', async () => {
+    const d = expectOk(await call('PUT', `/api/admin/counters/${state.counterId}/services`, {
+      queueTypeIds: [state.queueTypeId],
+    }))
+    return d.services.map(s => s.queueType.code).join(', ')
+  })
+
+  await check('POST /api/admin/assignments (tempatkan operator)', async () => {
     const d = expectOk(await call('POST', '/api/admin/assignments', {
-      userId: state.userId, eventId: state.eventId, queueTypeId: state.queueTypeId,
-      counterId: state.counterId, isDefault: true,
+      userId: state.userId, counterId: state.counterId,
     }))
     state.assignmentId = d.id
-    return d.queueType.name
+    return `${d.counter.name} → ${d.services.map(s => s.code).join(', ')}`
+  })
+
+  await check('loket tanpa layanan tidak bisa ditempati', async () => {
+    const kosong = expectOk(await call('POST', '/api/admin/counters', {
+      eventId: state.eventId, code: 'LK', name: 'Loket Kosong',
+    }))
+    const res = await call('POST', '/api/admin/assignments', {
+      userId: state.userId, counterId: kosong.id,
+    })
+    expectOk(await call('DELETE', `/api/admin/counters/${kosong.id}`))
+    if (res.json?.success) throw new Error('seharusnya ditolak')
+    return res.json.code
   })
 
   // --- form ---
@@ -388,7 +407,9 @@ async function main() {
   await check('operator lain tidak bisa akses layanan ini', async () => {
     const saved = cookie
     cookie = ''
-    await call('POST', '/api/auth/sign-in/email', { email: 'operator1@antrean.local', password: 'password123' })
+    // Pengguna yang dibuat uji ini sendiri — bukan operator demo, yang sejak §28
+    // hanya boleh terikat pada satu event.
+    await call('POST', '/api/auth/sign-in/email', { email: auditEmail, password: 'password123' })
     const res = await call('GET', `/api/operator/board?queueTypeId=${state.queueTypeId}`)
     cookie = saved
     if (res.json?.success) throw new Error('seharusnya ditolak')

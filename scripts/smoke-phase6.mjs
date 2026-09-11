@@ -79,9 +79,18 @@ async function main() {
   })).data
   await api('POST', `/api/admin/public-pages/${page.id}/publish`, { isPublished: true })
 
-  const users = await api('GET', '/api/admin/users')
-  const operator = users.data.users.find(u => u.email === 'operator1@antrean.local')
-  await api('POST', '/api/admin/assignments', { userId: operator.id, eventId, queueTypeId: queueType.id, counterId: counter.id })
+  // Operator khusus untuk event uji ini (§28: satu operator satu event).
+  const operatorEmail = `op.uji.${stamp}@antrean.local`
+  const operatorRoleId = (await api('GET', '/api/admin/users')).data.roles.find(r => r.key === 'OPERATOR').id
+  const operator = (await api('POST', '/api/admin/users', {
+    name: `Operator Uji ${stamp}`,
+    email: operatorEmail,
+    password: 'password123',
+    roleId: operatorRoleId,
+    isActive: true,
+  })).data
+  await api('PUT', `/api/admin/counters/${counter.id}/services`, { queueTypeIds: [queueType.id] })
+  await api('POST', '/api/admin/assignments', { userId: operator.id, counterId: counter.id })
 
   try {
     // ---- siapkan data: 4 antrean, 2 diselesaikan lewat operator ----
@@ -97,7 +106,7 @@ async function main() {
     record('empat antrean uji berhasil dibuat', taken.every(t => !t.startsWith('GAGAL')), taken.join(', '))
 
     const adminCookie = cookie
-    await login('operator1@antrean.local')
+    await login(operatorEmail)
     const first = await api('POST', '/api/operator/queue/next', { queueTypeId: queueType.id, counterId: counter.id })
     await api('POST', `/api/operator/queue/${first.data.id}/serving`, {})
     await api('POST', `/api/operator/queue/${first.data.id}/complete`, {})
@@ -216,6 +225,12 @@ async function main() {
   }
   finally {
     await login('superadmin@antrean.local').catch(() => {})
+      const leftovers = await api('GET', `/api/admin/queues?eventId=${eventId}&perPage=200`).catch(() => null)
+      for (const q of leftovers?.data?.items ?? []) {
+        if (['WAITING', 'CALLED', 'SERVING'].includes(q.status)) {
+          await api('POST', `/api/operator/queue/${q.id}/cancel`, { reason: 'Pembersihan uji' }).catch(() => {})
+        }
+      }
     await api('DELETE', `/api/admin/events/${eventId}`).catch(() => {})
   }
 

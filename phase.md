@@ -33,12 +33,13 @@ Terakhir diperbarui: **6 September 2026** (Phase 7 & 8 selesai — seluruh phase
 | `npm run test` | 72 test hijau (44 unit + 28 integrasi) |
 | `npm run typecheck` · `npx eslint .` | bersih |
 | `npm run smoke:api` | 53/53 endpoint |
-| `npm run smoke:browser` | 11/11 — termasuk sapuan **21 halaman admin** & pemeriksaan tidak ada halaman placeholder |
+| `npm run smoke:browser` | 12/12 — termasuk sapuan **21 halaman admin**, pemeriksaan tidak ada halaman placeholder, dan layar penuh display |
 | `npm run smoke:phase5` | 11/11 media, playlist, display builder |
 | `npm run smoke:phase6` | 13/13 analytics, laporan, ekspor, audit |
 | `npm run smoke:phase7` | 30/30 pengaturan, rating, integrasi, autofill, kebocoran data |
 | `npm run smoke:phase8` | 13/13 penjadwal, header keamanan, rate limit, unggahan |
 | `npm run load-test` | 2.000 antrean (0 gagal) + 200 display tersambung, siaran sampai 200/200 |
+| `npm run ux-audit` | 37/37 — fungsi lewat antarmuka, responsif 3 lebar × 22 halaman, kontras WCAG AA, aksesibilitas, umpan balik |
 
 **Acceptance criteria §59: 30/30 terpenuhi.**
 
@@ -87,6 +88,35 @@ Diukur pada `npm run dev` — bukan build produksi, jadi angkanya batas bawah:
 11. **Penjadwal berjalan di dalam proses Nitro**, bukan cron sistem, supaya `npm run dev` dan satu
     kontainer produksi sama-sama langsung bekerja. Konsekuensinya harus dimatikan pada instance
     tambahan saat scale-out (`SCHEDULER_ENABLED=false`).
+12. **Penutupan harian memakai status `SCHEDULED`, bukan `CLOSED`.** Ditemukan lewat
+    `npm run ux-audit`: event demo tertutup otomatis pada malam sebelumnya dan tidak pernah
+    terbuka lagi, karena pembukaan otomatis hanya menyentuh event `SCHEDULED`. `CLOSED` kini
+    berarti akhir yang sebenarnya — melewati tanggal berakhir, tanpa hari layanan lain, atau
+    ditutup admin.
+13. **Warna jenis antrean disesuaikan sebelum dipakai sebagai warna teks**
+    (`shared/utils/color.ts` + `useReadableColor()`). Warna pilihan admin bisa hanya 2,5:1 di atas
+    kartu gelap; helper ini menerangkannya sampai 4,5:1 tanpa mengubah identitas warnanya.
+14. **Cakupan operator diturunkan dari LOKET** (§12, §28). Ditemukan saat pengguna menanyakannya:
+    panel operator sempat menampilkan tab dari 11 event sekaligus, dan tab terpilih pertama belum
+    tentu event yang sedang dikerjakan. Aturan sempat ditambal sebagai pemeriksaan "satu operator
+    satu event" di atas struktur lama (`operator_assignments` per jenis antrean), lalu dirombak
+    menjadi struktural atas permintaan pengguna: `operator_assignments` kini `UNIQUE(user_id)`
+    dengan satu `counter_id`, dan layanan pindah ke tabel baru `counter_services`. Karena loket
+    milik satu event, batas event tidak lagi butuh pemeriksaan sendiri — tidak mungkin dilanggar.
+    Pemindahan tetap harus eksplisit dan tetap dijaga agar tidak mencabut operator yang sedang
+    melayani; loket tanpa layanan tidak bisa ditempati.
+15. **Sakelar tema di setiap halaman, dan warna primer per tema.** Diminta pengguna
+    setelah panel admin saja yang punya penggantian tema (itu pun tersembunyi di menu
+    akun). Sakelarnya satu komponen (`UiThemeToggle`) yang dipasang lewat layout,
+    plus langsung pada halaman yang tidak memakai layout (operator, display) dan pada
+    `app/error.vue` yang sekaligus menggantikan halaman galat bawaan Nuxt yang
+    berbahasa Inggris. Sapuan tema gelap ke lebih banyak halaman langsung menemukan
+    dua cacat: `--ui-primary` bernilai sama untuk kedua tema — sehingga teks tombol
+    utama di tema gelap hanya 3,3:1 — dan beberapa lencana masih memakai warna
+    layanan mentah tanpa `useReadableColor()`.
+16. **Label waktu relatif memakai `useNow()`.** `Date.now()` di dalam render membuat SSR dan
+    hidrasi menghasilkan teks berbeda — Vue melaporkannya sebagai mismatch dan membuang DOM
+    yang sudah dirender.
 
 ---
 
@@ -104,7 +134,7 @@ Diukur pada `npm run dev` — bukan build produksi, jadi angkanya batas bawah:
 | 8 | **Dynamic form: EAV + snapshot JSON** | `visitor_field_values` untuk query/filter/report; `visitors.data` JSON untuk render cepat & tahan perubahan form | Sedikit denormalisasi, disengaja |
 | 9 | **Secret datasource: AES-256-GCM** (`APP_ENCRYPTION_KEY`) | §6 melarang plaintext | Key rotation disiapkan lewat kolom `key_version` |
 | 10 | **Storage abstraction** (`StorageService`): driver `local` dulu, `s3/minio` menyusul | §20 media library; hindari vendor lock | Upload lewat service, jangan langsung `fs` di handler |
-| 11 | **Counter/Loket jadi entitas sendiri** (improvement §58) | Spec menampilkan "LOKET 1" di display & announcement tapi tidak ada di daftar tabel §30 | Tambah tabel `counters`, direferensikan `operator_assignments` & `queues` |
+| 11 | **Counter/Loket jadi entitas sendiri** (improvement §58), dan **loket-lah pemilik layanan** | Spec menampilkan "LOKET 1" di display & announcement tapi tidak ada di daftar tabel §30. Layanan diletakkan pada loket (bukan pada operator) supaya satu perubahan berlaku bagi semua operator di loket itu | Tabel `counters` + `counter_services`; `operator_assignments` hanya menghubungkan user → loket |
 | 12 | **UI: Nuxt UI v4 + Tailwind v4** | Konsisten, ada Modal/Drawer/Toast/Skeleton/Badge siap pakai (§41) | Display & public page pakai styling custom di atasnya (butuh tampilan non-dashboard) |
 
 ---
@@ -140,9 +170,10 @@ erDiagram
 
     QUEUE_TYPES ||--o{ QUEUE_COUNTERS : "seq per service_date"
     QUEUE_TYPES ||--o{ QUEUES : issues
-    QUEUE_TYPES ||--o{ OPERATOR_ASSIGNMENTS : "assigned to"
-    USERS ||--o{ OPERATOR_ASSIGNMENTS : has
-    COUNTERS ||--o{ OPERATOR_ASSIGNMENTS : at
+    QUEUE_TYPES ||--o{ COUNTER_SERVICES : "served at"
+    COUNTERS ||--o{ COUNTER_SERVICES : serves
+    USERS ||--o| OPERATOR_ASSIGNMENTS : "seated via"
+    COUNTERS ||--o{ OPERATOR_ASSIGNMENTS : seats
 
     VISITORS ||--o{ QUEUES : takes
     VISITORS ||--o{ VISITOR_FIELD_VALUES : fills
@@ -196,7 +227,8 @@ Konvensi global: PK `id CHAR(26)` (ULID) · `created_at` / `updated_at` di semua
 | `queue_counters` | event_id, queue_type_id, service_date DATE, current_number INT | **UNIQUE(event_id, queue_type_id, service_date)** |
 | `queues` | organization_id, event_id, queue_type_id, visitor_id, service_date DATE, sequence_number INT, queue_number VARCHAR(32), status ENUM(WAITING, CALLED, SERVING, SKIPPED, COMPLETED, CANCELLED, NO_SHOW), priority INT, public_token CHAR(43), operator_id, counter_id, recall_count, called_at, last_called_at, serving_started_at, finished_at, waiting_seconds, service_seconds, source ENUM(PUBLIC, KIOSK, OPERATOR, API), note, deleted_at | **UNIQUE(event_id, queue_type_id, service_date, sequence_number)**, UNIQUE(public_token), **IDX(event_id, queue_type_id, service_date, status, sequence_number)** ← dipakai NEXT, IDX(operator_id), IDX(service_date), IDX(created_at) |
 | `queue_events` | queue_id, event_type, previous_status, new_status, operator_id, metadata JSON, created_at | IDX(queue_id, created_at) |
-| `operator_assignments` | user_id, event_id, queue_type_id, counter_id NULL, is_default | UNIQUE(user_id, queue_type_id), IDX(queue_type_id) |
+| `operator_assignments` | user_id, counter_id | UNIQUE(user_id) → satu operator satu loket, IDX(counter_id) |
+| `counter_services` | counter_id, queue_type_id, display_order | UNIQUE(counter_id, queue_type_id), IDX(queue_type_id) |
 
 **Visitor & Form Dinamis**
 
@@ -431,7 +463,7 @@ Belum ada di §54, tapi wajib duluan supaya phase berikutnya tidak berdarah-dara
 
 ### PHASE 3 — Dashboard Operator *(≈4 hari)* — §54 Phase 3
 
-- Assignment operator ↔ queue type ↔ counter.
+- Penempatan operator → loket, dan layanan loket (`counter_services`).
 - `GET /api/operator/queues` (hanya assignment miliknya, §57.5).
 - Aksi: NEXT (algoritma §1.4-B), RECALL (`recall_count`, `last_called_at`, batas `recall_limit`), SKIP, COMPLETE, CALL-specific (termasuk memanggil ulang yang SKIPPED §57.7), CANCEL/NO_SHOW.
 - Guard transisi status di `QueueStateMachine` (§57.8, §57.9) — satu tempat, dipakai semua endpoint.

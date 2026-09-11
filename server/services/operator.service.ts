@@ -6,6 +6,7 @@ import { ERROR_CODES } from '../../shared/constants/errors'
 import { formatServiceDate, resolveServiceDate, secondsBetween } from '../utils/datetime'
 import { settingService } from './setting.service'
 import { SETTING_KEYS } from '../../shared/constants/settings'
+import { QUEUE_PRIORITY } from '../../shared/constants/queue'
 
 type Tx = Prisma.TransactionClient
 
@@ -60,48 +61,130 @@ async function logQueueEvent(
   })
 }
 
-/** Pastikan operator memang ditugaskan pada jenis antrean tersebut (§57.5). */
-async function requireAssignment(userId: string, queueTypeId: string) {
-  const assignment = await prisma.operatorAssignment.findFirst({
-    where: { userId, queueTypeId },
+/**
+ * Penempatan operator: loketnya beserta layanan yang dilayani loket itu (§12, §28).
+ *
+ * Cakupan operator TIDAK lagi disimpan per jenis antrean. Ia duduk di satu loket,
+ * dan loket itulah yang menentukan layanan apa saja yang boleh ia tangani. Karena
+ * loket dimiliki satu event, cakupannya otomatis terkurung pada event tersebut.
+ */
+async function findPlacement(userId: string) {
+  return prisma.operatorAssignment.findUnique({
+    where: { userId },
     include: {
-      queueType: { select: { id: true, code: true, name: true, eventId: true, estServiceSeconds: true } },
-      counter: { select: { id: true, code: true, name: true } },
+      counter: {
+        include: {
+          event: { select: { id: true, name: true, status: true, timezone: true } },
+          services: {
+            orderBy: { displayOrder: 'asc' },
+            include: {
+              queueType: {
+                select: { id: true, code: true, name: true, color: true, icon: true, eventId: true, estServiceSeconds: true, isActive: true, deletedAt: true },
+              },
+            },
+          },
+        },
+      },
     },
   })
-  if (!assignment) {
-    throw errors.forbidden('Anda tidak ditugaskan pada jenis antrean ini')
+}
+
+/** Bentuk yang dipakai seluruh aksi operator: layanan + loket tempat ia duduk. */
+type ServiceAccess = {
+  queueType: { id: string, code: string, name: string, eventId: string, estServiceSeconds: number }
+  counter: { id: string, code: string, name: string } | null
+}
+
+/** Pastikan loket operator memang melayani jenis antrean tersebut (§57.5). */
+async function requireAssignment(userId: string, queueTypeId: string): Promise<ServiceAccess> {
+  const placement = await findPlacement(userId)
+  if (!placement) throw errors.forbidden('Anda belum ditempatkan pada loket mana pun')
+
+  const service = placement.counter.services.find(
+    row => row.queueTypeId === queueTypeId && !row.queueType.deletedAt,
+  )
+  if (!service) {
+    throw errors.forbidden('Loket Anda tidak melayani jenis antrean ini')
   }
-  return assignment
+
+  return {
+    queueType: service.queueType,
+    counter: { id: placement.counter.id, code: placement.counter.code, name: placement.counter.name },
+  }
+}
+
+/**
+ * Penjagaan penempatan dengan pengecualian untuk pengawas lintas layanan.
+ *
+ * Tanpa pengecualian ini ada jalan buntu yang nyata: satu antrean WAITING pada
+ * layanan yang tidak dilayani loket mana pun tidak bisa dibereskan SIAPA PUN —
+ * operator ditolak karena bukan layanan loketnya, dan admin ditolak karena tidak
+ * duduk di loket mana pun. Antrean itu menggantung selamanya, dan event-nya pun
+ * tidak bisa ditutup atau dihapus karena masih ada antrean aktif.
+ *
+ * Izin `queue.view_all` memang bermakna "lintas assignment" (lihat katalog izin),
+ * dan izin aksinya sendiri sudah diperiksa lebih dulu oleh handler. Operator biasa
+ * tidak memiliki keduanya, jadi batas kewenangan mereka tidak berubah.
+ */
+async function requireQueueAccess(userId: string, queueTypeId: string, crossAssignment = false): Promise<ServiceAccess> {
+  if (!crossAssignment) return requireAssignment(userId, queueTypeId)
+
+  const placement = await findPlacement(userId)
+  const service = placement?.counter.services.find(
+    row => row.queueTypeId === queueTypeId && !row.queueType.deletedAt,
+  )
+  if (placement && service) {
+    return {
+      queueType: service.queueType,
+      counter: { id: placement.counter.id, code: placement.counter.code, name: placement.counter.name },
+    }
+  }
+
+  // Pengawas boleh bertindak walau tidak duduk di loket mana pun.
+  const queueType = await prisma.queueType.findFirst({
+    where: { id: queueTypeId, deletedAt: null },
+    select: { id: true, code: true, name: true, eventId: true, estServiceSeconds: true },
+  })
+  if (!queueType) throw errors.notFound('Jenis antrean tidak ditemukan')
+
+  return { queueType, counter: null }
 }
 
 export const operatorQueueService = {
-  /** Daftar assignment operator beserta ringkasan antrean hari ini. */
+  /**
+   * Tempat kerja operator: satu loket, beserta layanan yang dilayani loket itu.
+   *
+   * Bentuknya tetap berupa daftar "penugasan" agar antarmuka operator tidak perlu
+   * dirombak — hanya saja isinya kini diturunkan dari loket, sehingga tidak mungkin
+   * lagi memuat layanan dari event yang berbeda.
+   */
   async workspace(userId: string) {
-    const assignments = await prisma.operatorAssignment.findMany({
-      where: { userId },
-      orderBy: { isDefault: 'desc' },
-      include: {
-        queueType: { select: { id: true, code: true, name: true, color: true, icon: true } },
-        counter: { select: { id: true, code: true, name: true } },
-        event: { select: { id: true, name: true, status: true, timezone: true } },
-      },
-    })
+    const placement = await findPlacement(userId)
+    if (!placement) return []
 
-    return assignments.map(a => ({
-      id: a.id,
-      isDefault: a.isDefault,
-      queueType: a.queueType,
-      counter: a.counter,
-      event: a.event,
-    }))
+    const counter = placement.counter
+    return counter.services
+      .filter(row => !row.queueType.deletedAt && row.queueType.isActive)
+      .map(row => ({
+        id: `${placement.id}:${row.queueTypeId}`,
+        isDefault: row.displayOrder === 0,
+        queueType: {
+          id: row.queueType.id,
+          code: row.queueType.code,
+          name: row.queueType.name,
+          color: row.queueType.color,
+          icon: row.queueType.icon,
+        },
+        counter: { id: counter.id, code: counter.code, name: counter.name },
+        event: counter.event,
+      }))
   },
 
   /** Papan kerja satu jenis antrean: sedang dilayani, menunggu, dilewati, riwayat (§13). */
   async board(userId: string, queueTypeId: string) {
-    const assignment = await requireAssignment(userId, queueTypeId)
+    const access = await requireAssignment(userId, queueTypeId)
     const event = await prisma.event.findFirstOrThrow({
-      where: { id: assignment.queueType.eventId },
+      where: { id: access.queueType.eventId },
       select: { id: true, name: true, status: true, timezone: true, allowFinishAfterClose: true },
     })
 
@@ -141,8 +224,8 @@ export const operatorQueueService = {
       event,
       serviceDate: formatServiceDate(serviceDate),
       assignment: {
-        queueType: assignment.queueType,
-        counter: assignment.counter,
+        queueType: access.queueType,
+        counter: access.counter,
       },
       current,
       waiting,
@@ -168,9 +251,9 @@ export const operatorQueueService = {
    * COMPLETED — sesuai alur tombol pada dashboard operator.
    */
   async callNext(params: { userId: string, queueTypeId: string, counterId?: string | null }) {
-    const assignment = await requireAssignment(params.userId, params.queueTypeId)
+    const access = await requireAssignment(params.userId, params.queueTypeId)
     const event = await prisma.event.findFirstOrThrow({
-      where: { id: assignment.queueType.eventId },
+      where: { id: access.queueType.eventId },
       select: { id: true, organizationId: true, status: true, timezone: true, allowFinishAfterClose: true },
     })
 
@@ -183,7 +266,7 @@ export const operatorQueueService = {
 
     const serviceDate = resolveServiceDate(event.timezone)
     const serviceDateStr = formatServiceDate(serviceDate)
-    const counterId = params.counterId ?? assignment.counterId ?? null
+    const counterId = params.counterId ?? access.counter?.id ?? null
 
     return prisma.$transaction(async (tx) => {
       // 1. Tutup antrean yang sedang dilayani operator ini
@@ -265,15 +348,37 @@ export const operatorQueueService = {
     }, { timeout: 15_000, isolationLevel: 'ReadCommitted' })
   },
 
-  /** Panggil antrean tertentu — termasuk memanggil ulang yang SKIPPED (§57.7). */
-  async callSpecific(params: { userId: string, queueId: string, counterId?: string | null }) {
+  /**
+   * Panggil antrean tertentu — termasuk memanggil ulang yang SKIPPED (§57.7).
+   *
+   * `priority: true` sekaligus mencatat antreannya sebagai prioritas. Catatan itu
+   * ikut ke siaran realtime (layar menampilkan penanda khusus), riwayat antrean,
+   * dan ekspor.
+   *
+   * Yang TIDAK terjadi: urutan NEXT untuk nomor itu tidak lagi berubah, karena
+   * penandaan terjadi tepat saat ia dipanggil — dan nomor yang sudah dipanggil
+   * bukan lagi WAITING. Kolom `priority` memang kunci urutan pertama NEXT, tetapi
+   * itu hanya berpengaruh pada antrean yang masih menunggu.
+   */
+  async callSpecific(params: {
+    userId: string
+    queueId: string
+    counterId?: string | null
+    priority?: boolean
+  }) {
     const queue = await prisma.queue.findFirst({ where: { id: params.queueId, deletedAt: null } })
     if (!queue) throw errors.notFound('Antrean tidak ditemukan')
 
-    const assignment = await requireAssignment(params.userId, queue.queueTypeId)
+    const access = await requireAssignment(params.userId, queue.queueTypeId)
     assertTransition(queue.status, 'CALLED')
 
-    const counterId = params.counterId ?? assignment.counterId ?? null
+    const counterId = params.counterId ?? access.counter?.id ?? null
+    /**
+     * `COALESCE` dipakai supaya panggilan biasa tidak menurunkan prioritas yang
+     * sudah ada: nomor yang tadi ditandai prioritas tetap prioritas walau kemudian
+     * dipanggil ulang lewat tombol biasa.
+     */
+    const priorityValue = params.priority ? QUEUE_PRIORITY.PRIORITY : null
 
     return prisma.$transaction(async (tx) => {
       const affected = await tx.$executeRaw`
@@ -281,6 +386,7 @@ export const operatorQueueService = {
         SET status = 'CALLED',
             operator_id = ${params.userId},
             counter_id = ${counterId},
+            priority = GREATEST(priority, COALESCE(${priorityValue}, priority)),
             called_at = COALESCE(called_at, UTC_TIMESTAMP(3)),
             last_called_at = UTC_TIMESTAMP(3),
             waiting_seconds = COALESCE(waiting_seconds, TIMESTAMPDIFF(SECOND, created_at, UTC_TIMESTAMP())),
@@ -297,7 +403,7 @@ export const operatorQueueService = {
         previousStatus: queue.status,
         newStatus: 'CALLED',
         operatorId: params.userId,
-        metadata: { counterId, manual: true },
+        metadata: { counterId, manual: true, priority: !!params.priority },
       })
 
       return tx.queue.findFirstOrThrow({ where: { id: params.queueId }, include: QUEUE_INCLUDE })
@@ -342,26 +448,28 @@ export const operatorQueueService = {
   },
 
   /** Tandai antrean sedang dilayani (pengunjung sudah datang ke loket). */
-  async startServing(params: { userId: string, queueId: string }) {
+  async startServing(params: { userId: string, queueId: string, crossAssignment?: boolean }) {
     return this.transition({
       userId: params.userId,
       queueId: params.queueId,
       to: 'SERVING',
       eventType: 'SERVING',
       data: { servingStartedAt: new Date() },
+      crossAssignment: params.crossAssignment,
     })
   },
 
-  async skip(params: { userId: string, queueId: string }) {
+  async skip(params: { userId: string, queueId: string, crossAssignment?: boolean }) {
     return this.transition({
       userId: params.userId,
       queueId: params.queueId,
       to: 'SKIPPED',
       eventType: 'SKIPPED',
+      crossAssignment: params.crossAssignment,
     })
   },
 
-  async complete(params: { userId: string, queueId: string }) {
+  async complete(params: { userId: string, queueId: string, crossAssignment?: boolean }) {
     const queue = await prisma.queue.findFirst({ where: { id: params.queueId, deletedAt: null } })
     if (!queue) throw errors.notFound('Antrean tidak ditemukan')
     const startedAt = queue.servingStartedAt ?? queue.calledAt ?? queue.createdAt
@@ -372,20 +480,22 @@ export const operatorQueueService = {
       to: 'COMPLETED',
       eventType: 'COMPLETED',
       data: { finishedAt: new Date(), serviceSeconds: secondsBetween(startedAt) },
+      crossAssignment: params.crossAssignment,
     })
   },
 
-  async noShow(params: { userId: string, queueId: string }) {
+  async noShow(params: { userId: string, queueId: string, crossAssignment?: boolean }) {
     return this.transition({
       userId: params.userId,
       queueId: params.queueId,
       to: 'NO_SHOW',
       eventType: 'NO_SHOW',
       data: { finishedAt: new Date() },
+      crossAssignment: params.crossAssignment,
     })
   },
 
-  async cancel(params: { userId: string, queueId: string, reason?: string }) {
+  async cancel(params: { userId: string, queueId: string, reason?: string, crossAssignment?: boolean }) {
     return this.transition({
       userId: params.userId,
       queueId: params.queueId,
@@ -393,6 +503,7 @@ export const operatorQueueService = {
       eventType: 'CANCELLED',
       data: { finishedAt: new Date(), note: params.reason ?? null },
       metadata: { reason: params.reason },
+      crossAssignment: params.crossAssignment,
     })
   },
 
@@ -404,11 +515,13 @@ export const operatorQueueService = {
     eventType: string
     data?: Prisma.QueueUpdateInput
     metadata?: Record<string, unknown>
+    /** Pemegang izin lintas layanan boleh bertindak tanpa penugasan. */
+    crossAssignment?: boolean
   }) {
     const queue = await prisma.queue.findFirst({ where: { id: params.queueId, deletedAt: null } })
     if (!queue) throw errors.notFound('Antrean tidak ditemukan')
 
-    await requireAssignment(params.userId, queue.queueTypeId)
+    await requireQueueAccess(params.userId, queue.queueTypeId, params.crossAssignment)
     assertTransition(queue.status, params.to)
 
     return prisma.$transaction(async (tx) => {

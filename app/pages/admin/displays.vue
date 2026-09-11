@@ -21,6 +21,8 @@ interface DisplayRow {
 
 const { can } = useMe()
 const { call } = useApi()
+// Waktu acuan bersama SSR & klien (lihat useNow) agar label waktu tidak mismatch.
+const now = useNow()
 const toast = useToast()
 const { currentId, loadEvents } = useCurrentEvent()
 await loadEvents()
@@ -120,7 +122,8 @@ function statusMeta(device: DisplayRow) {
 
 function lastSeen(value: string | null) {
   if (!value) return 'Belum pernah terhubung'
-  const diff = Date.now() - new Date(value).getTime()
+  // Waktu acuan bersama supaya label ini tidak memicu mismatch hidrasi.
+  const diff = now.value - new Date(value).getTime()
   const minutes = Math.round(diff / 60000)
   if (minutes < 1) return 'Baru saja'
   if (minutes < 60) return `${minutes} menit lalu`
@@ -193,8 +196,8 @@ function lastSeen(value: string | null) {
         <div class="mt-4 flex items-center gap-2 rounded-lg bg-slate-50 p-2 dark:bg-slate-800/50">
           <UIcon name="i-lucide-monitor" class="size-4 shrink-0 text-slate-400" />
           <code class="min-w-0 flex-1 truncate text-xs">/display/{{ device.deviceCode }}</code>
-          <UButton icon="i-lucide-copy" size="xs" variant="ghost" color="neutral" @click="copyUrl(device)" />
-          <UButton icon="i-lucide-external-link" size="xs" variant="ghost" color="neutral" :to="`/display/${device.deviceCode}`" target="_blank" />
+          <UButton icon="i-lucide-copy" aria-label="Salin tautan layar" title="Salin tautan layar" size="xs" variant="ghost" color="neutral" @click="copyUrl(device)" />
+          <UButton icon="i-lucide-external-link" aria-label="Buka layar di tab baru" title="Buka layar di tab baru" size="xs" variant="ghost" color="neutral" :to="`/display/${device.deviceCode}`" target="_blank" />
         </div>
 
         <div v-if="can(PERMISSIONS.DISPLAY_MANAGE)" class="mt-3">
@@ -221,7 +224,7 @@ function lastSeen(value: string | null) {
             label="Reset Pairing"
             :action="() => resetPairing(device)"
           />
-          <UButton size="sm" variant="ghost" color="error" icon="i-lucide-trash-2" @click="deleteTarget = device" />
+          <UButton size="sm" variant="ghost" color="error" icon="i-lucide-trash-2" aria-label="Hapus perangkat" title="Hapus perangkat" @click="deleteTarget = device" />
         </div>
       </div>
     </div>

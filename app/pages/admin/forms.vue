@@ -325,6 +325,8 @@ function iconOf(type: string) {
             variant="ghost"
             color="error"
             icon="i-lucide-trash-2"
+            aria-label="Hapus formulir"
+            title="Hapus formulir"
             @click="deleteFormTarget = activeForm"
           />
         </div>
@@ -425,9 +427,9 @@ function iconOf(type: string) {
                   </p>
                 </div>
                 <div class="flex shrink-0 gap-0.5">
-                  <UButton icon="i-lucide-chevron-up" size="xs" variant="ghost" color="neutral" @click.stop="moveField(index, index - 1)" />
-                  <UButton icon="i-lucide-chevron-down" size="xs" variant="ghost" color="neutral" @click.stop="moveField(index, index + 1)" />
-                  <UButton icon="i-lucide-trash-2" size="xs" variant="ghost" color="error" @click.stop="removeField(index)" />
+                  <UButton icon="i-lucide-chevron-up" aria-label="Naikkan urutan field" title="Naikkan urutan field" size="xs" variant="ghost" color="neutral" @click.stop="moveField(index, index - 1)" />
+                  <UButton icon="i-lucide-chevron-down" aria-label="Turunkan urutan field" title="Turunkan urutan field" size="xs" variant="ghost" color="neutral" @click.stop="moveField(index, index + 1)" />
+                  <UButton icon="i-lucide-trash-2" aria-label="Hapus field" title="Hapus field" size="xs" variant="ghost" color="error" @click.stop="removeField(index)" />
                 </div>
               </li>
             </ul>
@@ -492,7 +494,7 @@ function iconOf(type: string) {
                 <div v-for="(opt, i) in selected.options ?? []" :key="i" class="mb-2 flex gap-2">
                   <UInput v-model="opt.label" size="sm" placeholder="Label" class="flex-1" />
                   <UInput v-model="opt.value" size="sm" placeholder="value" class="w-28 font-mono" />
-                  <UButton size="xs" variant="ghost" color="error" icon="i-lucide-x" @click="removeOption(i)" />
+                  <UButton size="xs" variant="ghost" color="error" icon="i-lucide-x" aria-label="Hapus pilihan" title="Hapus pilihan" @click="removeOption(i)" />
                 </div>
               </div>
             </div>

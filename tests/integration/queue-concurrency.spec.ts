@@ -1,7 +1,7 @@
 import { afterAll, beforeAll, describe, expect, it } from 'vitest'
 import { prisma } from '../../server/utils/prisma'
 import { queueService } from '../../server/services/queue.service'
-import { assignOperator, makeCounter, makeEvent, makeOrganization, makeQueueType, makeUser, resetDatabase } from '../helpers/factory'
+import { makeCounter, makeEvent, makeOrganization, makeQueueType, makeUser, resetDatabase, seatOperator } from '../helpers/factory'
 
 /**
  * §57.3 — nomor antrean tidak boleh duplikat
@@ -84,8 +84,10 @@ describe('konkurensi antrean', () => {
     const counter2 = await makeCounter(eventId, 'LX2')
     const op1 = await makeUser(org.id, 'Operator A')
     const op2 = await makeUser(org.id, 'Operator B')
-    await assignOperator(op1.id, eventId, queueTypeId, counter1.id)
-    await assignOperator(op2.id, eventId, queueTypeId, counter2.id)
+    // Dua loket berbeda, keduanya melayani layanan yang sama — inilah kondisi
+    // yang membuat dua operator bisa menekan NEXT bersamaan.
+    await seatOperator(op1.id, counter1.id, [queueTypeId])
+    await seatOperator(op2.id, counter2.id, [queueTypeId])
 
     const waitingBefore = await prisma.queue.count({ where: { queueTypeId, status: 'WAITING' } })
     expect(waitingBefore).toBeGreaterThanOrEqual(10)

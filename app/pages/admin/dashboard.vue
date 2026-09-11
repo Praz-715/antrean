@@ -24,6 +24,8 @@ interface DashboardData {
 }
 
 const { currentId, loadEvents } = useCurrentEvent()
+// Warna layanan dipilih admin; disesuaikan agar tetap terbaca di tema gelap.
+const { readable } = useReadableColor()
 await loadEvents()
 
 const data = ref<DashboardData | null>(null)
@@ -72,7 +74,7 @@ const maxHourly = computed(() => Math.max(1, ...(data.value?.hourly.map(h => h.c
     >
       <template #actions>
         <UiEventPicker />
-        <UButton icon="i-lucide-refresh-cw" variant="outline" color="neutral" :loading="pending" @click="load()" />
+        <UButton icon="i-lucide-refresh-cw" aria-label="Muat ulang data" title="Muat ulang data" variant="outline" color="neutral" :loading="pending" @click="load()" />
       </template>
     </UiPageHeading>
 
@@ -180,7 +182,7 @@ const maxHourly = computed(() => Math.max(1, ...(data.value?.hourly.map(h => h.c
               :key="qt.id"
               class="flex flex-wrap items-center gap-4 rounded-lg border border-slate-100 p-3 dark:border-slate-800"
             >
-              <div class="size-9 rounded-lg" :style="{ backgroundColor: qt.color + '22', color: qt.color }">
+              <div class="size-9 rounded-lg" :style="{ backgroundColor: qt.color + '22', color: readable(qt.color) }">
                 <div class="flex size-full items-center justify-center text-sm font-bold">
                   {{ qt.code }}
                 </div>
@@ -197,7 +199,7 @@ const maxHourly = computed(() => Math.max(1, ...(data.value?.hourly.map(h => h.c
                 <p class="text-xs text-slate-500">
                   Sedang dilayani
                 </p>
-                <p class="queue-number text-lg" :style="{ color: qt.color }">
+                <p class="queue-number text-lg" :style="{ color: readable(qt.color) }">
                   {{ qt.currentNumber ?? '–' }}
                 </p>
               </div>

@@ -84,6 +84,17 @@ async function manualRefresh() {
 }
 
 // ---- cetak tiket (§46) ----
+/**
+ * URL pelacakan disusun dari konfigurasi, BUKAN dari `window.location`.
+ *
+ * `window` tidak ada saat render server, sehingga baris URL-nya hilang di HTML
+ * SSR lalu muncul saat hidrasi — Vue melaporkannya sebagai hydration mismatch
+ * dan membuang DOM tiket yang sudah dirender. Disusun dari konfigurasi, server
+ * dan peramban menghasilkan teks yang sama persis.
+ */
+const appUrl = useRuntimeConfig().public.appUrl
+const trackUrl = computed(() => `${appUrl}/queue/${token}`)
+
 const ticket = computed<TicketPayload | null>(() => {
   if (!data.value) return null
   return {
@@ -95,7 +106,7 @@ const ticket = computed<TicketPayload | null>(() => {
     issuedAt: new Date(data.value.createdAt).toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit' }),
     nowServing: data.value.nowServing?.queueNumber ?? null,
     visitorName: data.value.visitorName,
-    trackUrl: import.meta.client ? window.location.href : null,
+    trackUrl: trackUrl.value,
   }
 })
 

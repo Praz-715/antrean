@@ -25,6 +25,8 @@ interface QueueRow {
 
 const route = useRoute()
 const { currentId, loadEvents } = useCurrentEvent()
+// Warna layanan dipilih admin; disesuaikan agar tetap terbaca di tema gelap.
+const { readable } = useReadableColor()
 await loadEvents()
 
 const items = ref<QueueRow[]>([])
@@ -120,7 +122,7 @@ const summary = computed(() => {
           {{ connected ? 'Live' : 'Terputus' }}
         </span>
         <UiEventPicker />
-        <UButton icon="i-lucide-refresh-cw" variant="outline" color="neutral" :loading="pending" @click="load" />
+        <UButton icon="i-lucide-refresh-cw" aria-label="Muat ulang data" title="Muat ulang data" variant="outline" color="neutral" :loading="pending" @click="load" />
       </template>
     </UiPageHeading>
 
@@ -178,11 +180,11 @@ const summary = computed(() => {
           </tr>
           <tr v-for="row in items" :key="row.id" class="hover:bg-slate-50 dark:hover:bg-slate-800/40">
             <td class="px-4 py-2.5">
-              <span class="queue-number text-base" :style="{ color: row.queueType.color }">{{ row.queueNumber }}</span>
+              <span class="queue-number text-base" :style="{ color: readable(row.queueType.color) }">{{ row.queueNumber }}</span>
               <span v-if="row.recallCount" class="ml-1 text-xs text-slate-400">↻{{ row.recallCount }}</span>
             </td>
             <td class="px-4 py-2.5">
-              <span class="rounded px-1.5 py-0.5 text-xs font-medium" :style="{ backgroundColor: row.queueType.color + '1a', color: row.queueType.color }">
+              <span class="rounded px-1.5 py-0.5 text-xs font-medium" :style="{ backgroundColor: row.queueType.color + '1a', color: readable(row.queueType.color) }">
                 {{ row.queueType.code }}
               </span>
               <span class="ml-2 text-slate-600 dark:text-slate-300">{{ row.queueType.name }}</span>

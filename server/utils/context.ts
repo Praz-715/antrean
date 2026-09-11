@@ -15,8 +15,12 @@ export interface AuthContext {
   isSuperadmin: boolean
   roleKeys: string[]
   permissions: Set<string>
-  /** queue type id yang di-assign ke user (kosong untuk admin non-operator) */
+  /** queue type id yang dilayani loket operator (kosong untuk admin non-operator) */
   assignedQueueTypeIds: string[]
+  /** Loket tempat operator duduk, bila ada (§28). */
+  counterId: string | null
+  /** Event pemilik loket tersebut. */
+  counterEventId: string | null
 }
 
 /**
@@ -86,7 +90,21 @@ export async function getAuthContext(event: H3Event): Promise<AuthContext | null
           },
         },
       },
-      assignments: { select: { queueTypeId: true } },
+      /**
+       * Cakupan layanan operator kini melekat pada LOKET tempat ia duduk (§28),
+       * bukan pada daftar penugasan per jenis antrean.
+       */
+      assignment: {
+        select: {
+          counter: {
+            select: {
+              id: true,
+              eventId: true,
+              services: { select: { queueTypeId: true } },
+            },
+          },
+        },
+      },
     },
   })
 
@@ -113,7 +131,9 @@ export async function getAuthContext(event: H3Event): Promise<AuthContext | null
     isSuperadmin: roleKeys.includes(ROLE_KEYS.SUPERADMIN),
     roleKeys,
     permissions,
-    assignedQueueTypeIds: user.assignments.map(a => a.queueTypeId),
+    assignedQueueTypeIds: user.assignment?.counter.services.map(s => s.queueTypeId) ?? [],
+    counterId: user.assignment?.counter.id ?? null,
+    counterEventId: user.assignment?.counter.eventId ?? null,
   }
 
   authCache.set(user.id, { ctx, expiresAt: Date.now() + AUTH_CACHE_TTL_MS })

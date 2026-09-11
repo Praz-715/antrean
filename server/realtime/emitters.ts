@@ -37,6 +37,8 @@ export interface QueueBroadcastPayload {
   visitorName?: string | null
   calledAt?: string | null
   recallCount?: number
+  /** Tingkat prioritas; display memakainya untuk tampilan khusus. */
+  priority?: number
   serviceDate: string
 }
 

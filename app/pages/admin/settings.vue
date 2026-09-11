@@ -118,6 +118,7 @@ function isChanged(key: string) {
           <div
             v-for="def in fieldsOf(group.key)"
             :key="def.key"
+            :data-setting="def.key"
             class="flex flex-wrap items-center gap-4 px-5 py-4"
             :class="isChanged(def.key) ? 'bg-amber-50/60 dark:bg-amber-950/20' : ''"
           >
@@ -141,6 +142,7 @@ function isChanged(key: string) {
               <USwitch
                 v-if="def.type === 'boolean'"
                 :model-value="Boolean(draft[def.key])"
+                :aria-label="def.label"
                 :disabled="!editable"
                 @update:model-value="(v: boolean) => (draft[def.key] = v)"
               />
@@ -150,6 +152,7 @@ function isChanged(key: string) {
                   :model-value="Number(draft[def.key])"
                   :min="def.min"
                   :max="def.max"
+                  :aria-label="def.label"
                   :disabled="!editable"
                   class="w-full"
                   @update:model-value="(v: number) => (draft[def.key] = v ?? def.min ?? 0)"
@@ -161,6 +164,7 @@ function isChanged(key: string) {
                 v-else-if="def.type === 'select'"
                 :model-value="String(draft[def.key])"
                 :items="def.options ?? []"
+                :aria-label="def.label"
                 :disabled="!editable"
                 class="w-full"
                 @update:model-value="(v: string) => (draft[def.key] = v)"
@@ -170,6 +174,7 @@ function isChanged(key: string) {
                 v-else
                 :model-value="String(draft[def.key])"
                 :maxlength="def.maxLength"
+                :aria-label="def.label"
                 :disabled="!editable"
                 class="w-full"
                 @update:model-value="(v: string | number) => (draft[def.key] = String(v))"

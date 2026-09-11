@@ -114,6 +114,7 @@ Halaman publik contoh: `http://localhost:3000/p/demo2026`
 | `npm run smoke:phase7` | Uji pengaturan, rating, integrasi data source, dan autofill |
 | `npm run smoke:phase8` | Uji penjadwal otomatis, header keamanan, rate limit, unggahan |
 | `npm run load-test` | Uji beban ringan: 2.000 antrean + 200 display |
+| `npm run ux-audit` | Audit Function/UI/UX lewat peramban: responsif, kontras, aksesibilitas, umpan balik |
 | `npm run typecheck` | Pemeriksaan tipe |
 | `npm run lint` / `lint:fix` | ESLint |
 
@@ -149,14 +150,14 @@ Tidak ada query Prisma di dalam handler, tidak ada business logic di dalam `.vue
 |---|---|
 | `/p/{publishCode}` | Ambil nomor antrean |
 | `/queue/{token}` | Lacak status antrean (realtime) |
-| `/display/{deviceCode}` | Layar antrean (realtime + suara) |
+| `/display/{deviceCode}` | Layar antrean (realtime + suara + tombol layar penuh) |
 
 **Terproteksi**
 
 | Rute | Fungsi |
 |---|---|
 | `/login` | Masuk |
-| `/operator` | Dashboard operator |
+| `/operator` | Dashboard operator (termasuk panggil biasa & panggil prioritas) |
 | `/admin/dashboard` | Ringkasan harian |
 | `/admin/events`, `/admin/queue-types`, `/admin/counters` | Konfigurasi layanan |
 | `/admin/live-queue`, `/admin/queue-history` | Pemantauan antrean |
@@ -167,6 +168,12 @@ Tidak ada query Prisma di dalam handler, tidak ada business logic di dalam `.vue
 | `/admin/analytics`, `/admin/reports`, `/admin/audit-logs` | Grafik, laporan harian, pusat ekspor & jejak audit |
 | `/admin/visitors`, `/admin/feedback` | Data pengunjung & moderasi rating/testimoni |
 | `/admin/integrations`, `/admin/settings`, `/admin/roles` | Sumber data eksternal, pengaturan sistem, role & izin |
+
+Setiap halaman — termasuk beranda, login, halaman pengunjung, halaman tiket, panel
+operator, layar display, dan halaman galat — punya **sakelar tema terang/gelap**
+(`UiThemeToggle`). Pilihannya tersimpan per peramban dan bertahan lintas halaman.
+Layar display tetap **gelap secara bawaan** (dibaca dari jauh di ruang tunggu);
+tampilannya berubah terang hanya bila pengguna memang memilih tema terang.
 
 ---
 
@@ -215,6 +222,27 @@ Tidak ada query Prisma di dalam handler, tidak ada business logic di dalam `.vue
 - **Penjadwal.** Status event diselaraskan dengan jadwalnya tiap menit
   (`server/plugins/scheduler.ts`). Berjalan di dalam proses, jadi bila nanti dijalankan lebih dari
   satu instance, nyalakan hanya pada salah satunya (`SCHEDULER_ENABLED=false` pada sisanya).
+- **Operator → loket, loket → layanan (§12, §28).** Operator didudukkan di satu loket; loket itulah
+  yang menentukan layanan yang ia tangani, dan karena loket milik satu event, "satu operator satu
+  event" terjaga oleh struktur. Penempatan baru ditolak bila operatornya sudah duduk di loket
+  lain; pemindahan harus diminta eksplisit (`moveFromOtherCounter`) dan ditolak selama ia masih
+  memegang antrean berjalan. Satu loket boleh melayani beberapa layanan sekaligus — panel operator
+  menampilkannya sebagai bilah pemilih layanan. Loket tanpa layanan tidak bisa ditempati, dan
+  layanan loket tidak bisa dikosongkan selama masih ada operator di sana. Konsekuensinya skrip uji
+  membuat operator + loketnya sendiri — bukan memakai akun operator demo bersama.
+- **Arti status event.** Penutupan harian mengembalikan event ke `SCHEDULED`, bukan `CLOSED`.
+  Pembukaan otomatis hanya menyentuh event `SCHEDULED`, jadi menandainya `CLOSED` akan membuat
+  layanan harian berhenti selamanya setelah satu kali tutup. `CLOSED` disimpan untuk akhir yang
+  sebenarnya: melewati tanggal berakhir, tidak punya hari layanan lain, atau ditutup admin —
+  dan event `CLOSED` tidak pernah disentuh lagi oleh penjadwal.
 - **Header keamanan.** CSP, `X-Frame-Options`, `Referrer-Policy`, `Permissions-Policy`, dan HSTS
   (produksi) dipasang oleh `server/middleware/security-headers.ts` — ikut ke mana pun aplikasi
   dijalankan, termasuk saat dev.
+- **Waktu relatif.** Label seperti "5 menit lalu" WAJIB memakai `useNow()`, bukan `Date.now()`
+  langsung di render. Server dan klien merender pada detik yang berbeda, dan Vue melaporkannya
+  sebagai mismatch hidrasi — yang di produksi berarti sebagian DOM dibuang lalu digambar ulang.
+- **Warna pilihan admin sebagai warna teks.** Lewat `useReadableColor()`, bukan langsung
+  `:style="{ color: qt.color }"`. Warna pekat di atas kartu gelap hanya mencapai ±2,5:1;
+  helper ini menerangkannya sampai memenuhi 4,5:1 tanpa mengubah identitas warnanya.
+- **Tombol ikon-saja wajib punya `aria-label`** (dan sebaiknya `title`). Tanpa itu pembaca layar
+  hanya mengucapkan "tombol"; `npm run ux-audit` memeriksanya di seluruh halaman.

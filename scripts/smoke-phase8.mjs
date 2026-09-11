@@ -128,22 +128,35 @@ async function main() {
       `${accepted} diterima, ${limited} ditolak rate limit`)
 
     // ================= 4. PENJADWAL TUTUP OTOMATIS (§10) =================
-    // Jadwal yang jam tutupnya sudah lewat satu menit lalu.
+    // Jadwal harian yang jam tutupnya sudah lewat satu menit lalu.
     const closingEvent = await makeEvent('Uji Auto Close', 'OPEN', schedulesFor('00:00', wibTime(-1)))
+    // Event sekali jalan: hanya satu hari layanan, dan hari itu sudah lewat jam tutupnya.
+    const finalEvent = await makeEvent('Uji Tutup Final', 'OPEN', schedulesFor('00:00', wibTime(-1)).map((row, day) => ({
+      ...row,
+      isClosed: day !== new Date().getDay(),
+    })))
     // Jadwal yang sedang berlangsung, event masih SCHEDULED.
     const openingEvent = await makeEvent('Uji Auto Open', 'SCHEDULED', schedulesFor(wibTime(-60), wibTime(60)))
     // Jadwal yang belum mulai: event OPEN lebih awal tidak boleh ditutup paksa.
     const earlyEvent = await makeEvent('Uji Buka Lebih Awal', 'OPEN', schedulesFor(wibTime(60), wibTime(120)))
 
     const run = await api('POST', '/api/admin/scheduler/run')
-    record('penjadwal berjalan dan memeriksa event', run.success && run.data.checked >= 3,
+    record('penjadwal berjalan dan memeriksa event', run.success && run.data.checked >= 4,
       `${run.data?.checked} event diperiksa, ${run.data?.closed.length} ditutup, ${run.data?.opened.length} dibuka`)
 
     const after = await api('GET', '/api/admin/events')
     const statusOf = id => after.data.find(e => e.id === id)?.status
 
-    record('event yang melewati jam tutup ditutup otomatis',
-      statusOf(closingEvent) === 'CLOSED', `status=${statusOf(closingEvent)}`)
+    /**
+     * Penutupan HARIAN mengembalikan status ke SCHEDULED, bukan CLOSED — kalau tidak,
+     * layanan yang seharusnya berjalan setiap hari berhenti selamanya setelah satu
+     * kali tutup, karena pembukaan otomatis hanya menyentuh event SCHEDULED.
+     */
+    record('event yang melewati jam tutup kembali menunggu jadwal berikutnya',
+      statusOf(closingEvent) === 'SCHEDULED', `status=${statusOf(closingEvent)}`)
+
+    record('event tanpa hari layanan lain benar-benar ditutup',
+      statusOf(finalEvent) === 'CLOSED', `status=${statusOf(finalEvent)}`)
     record('event terjadwal dibuka otomatis saat masuk jam layanan',
       statusOf(openingEvent) === 'OPEN', `status=${statusOf(openingEvent)}`)
     record('event yang sengaja dibuka lebih awal tidak ditutup paksa',
@@ -162,7 +175,20 @@ async function main() {
     record('tutup otomatis menghormati pengaturan sistem',
       afterOff.data.find(e => e.id === offEvent)?.status === 'OPEN' && offRun.data.closed.length === 0,
       'event tetap OPEN saat autoClose dimatikan')
+
     await api('PUT', '/api/admin/settings', { values: { 'queue.autoClose': true } })
+
+    /**
+     * Siklus harian: event yang tadi kembali SCHEDULED harus terbuka lagi begitu jam
+     * layanannya tiba. Inilah yang membuktikan tutup-otomatis tidak mematikan layanan
+     * harian untuk selamanya.
+     */
+    await api('PUT', `/api/admin/events/${closingEvent}/schedules`, { schedules: schedulesFor(wibTime(-30), wibTime(30)) })
+    const reopenRun = await api('POST', '/api/admin/scheduler/run')
+    const afterReopen = await api('GET', '/api/admin/events')
+    record('event yang menunggu jadwal dibuka lagi saat jam layanan tiba',
+      afterReopen.data.find(e => e.id === closingEvent)?.status === 'OPEN' && reopenRun.data.opened.length >= 1,
+      `status=${afterReopen.data.find(e => e.id === closingEvent)?.status}`)
 
     // ================= 5. UNGGAHAN (§36) =================
     const fakeImage = new FormData()
@@ -189,7 +215,20 @@ async function main() {
   finally {
     await login('superadmin@antrean.local').catch(() => {})
     await api('PUT', '/api/admin/settings', { values: { 'queue.autoClose': true } }).catch(() => {})
-    for (const id of createdEvents) await api('DELETE', `/api/admin/events/${id}`).catch(() => {})
+    /**
+     * Antrean uji dibatalkan lebih dulu: event yang masih punya antrean aktif memang
+     * tidak boleh dihapus, dan tanpa langkah ini tiap jalan uji meninggalkan event
+     * menggantung yang mengotori jalan berikutnya.
+     */
+    for (const id of createdEvents) {
+      const qs = await api('GET', `/api/admin/queues?eventId=${id}&perPage=200`).catch(() => null)
+      for (const q of qs?.data?.items ?? []) {
+        if (['WAITING', 'CALLED', 'SERVING'].includes(q.status)) {
+          await api('POST', `/api/operator/queue/${q.id}/cancel`, { reason: 'Pembersihan uji' }).catch(() => {})
+        }
+      }
+      await api('DELETE', `/api/admin/events/${id}`).catch(() => {})
+    }
   }
 
   const failed = results.filter(r => !r.ok)

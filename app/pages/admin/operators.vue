@@ -16,10 +16,19 @@ interface UserRow {
   lastLoginAt: string | null
   createdAt: string
   roles: Role[]
-  assignments: Array<{ id: string, queueType: { id: string, code: string, name: string, color: string }, counter: { name: string } | null }>
+  /** Satu loket per operator; layanannya milik loket itu (§28). */
+  placement: {
+    id: string
+    counter: { id: string, code: string, name: string }
+    event: { id: string, name: string }
+    services: Array<{ id: string, code: string, name: string, color: string }>
+  } | null
 }
 
 const { can, me } = useMe()
+const now = useNow()
+// Warna layanan dipilih admin; disesuaikan agar tetap terbaca di tema gelap.
+const { readable } = useReadableColor()
 const { call } = useApi()
 
 const users = ref<UserRow[]>([])
@@ -133,7 +142,8 @@ function roleColor(key: string) {
 
 function relativeLogin(value: string | null) {
   if (!value) return 'Belum pernah'
-  const diff = Date.now() - new Date(value).getTime()
+  // Memakai waktu acuan bersama, bukan Date.now(), agar SSR & klien sepakat.
+  const diff = now.value - new Date(value).getTime()
   const minutes = Math.round(diff / 60000)
   if (minutes < 1) return 'Baru saja'
   if (minutes < 60) return `${minutes} menit lalu`
@@ -221,17 +231,19 @@ function relativeLogin(value: string | null) {
               />
             </td>
             <td class="hidden px-4 py-3 lg:table-cell">
-              <div v-if="!user.assignments.length" class="text-xs text-slate-400">
+              <div v-if="!user.placement" class="text-xs text-slate-400">
                 —
               </div>
-              <div v-else class="flex flex-wrap gap-1">
+              <div v-else class="flex flex-wrap items-center gap-1">
+                <span class="text-xs font-semibold">{{ user.placement.counter.name }}</span>
                 <span
-                  v-for="a in user.assignments"
-                  :key="a.id"
+                  v-for="service in user.placement.services"
+                  :key="service.id"
                   class="rounded px-1.5 py-0.5 text-xs font-medium"
-                  :style="{ backgroundColor: a.queueType.color + '1a', color: a.queueType.color }"
-                >
-                  {{ a.queueType.code }}{{ a.counter ? ` · ${a.counter.name}` : '' }}
+                  :style="{ backgroundColor: service.color + '1a', color: readable(service.color) }"
+                >{{ service.code }}</span>
+                <span v-if="!user.placement.services.length" class="text-xs text-amber-600 dark:text-amber-400">
+                  loket belum punya layanan
                 </span>
               </div>
             </td>
@@ -259,7 +271,7 @@ function relativeLogin(value: string | null) {
                     : [{ label: 'Hapus', icon: 'i-lucide-trash-2', color: 'error' as const, onSelect: () => (deleteTarget = user) }],
                 ]"
               >
-                <UButton icon="i-lucide-ellipsis-vertical" variant="ghost" color="neutral" size="xs" />
+                <UButton icon="i-lucide-ellipsis-vertical" aria-label="Menu tindakan" title="Menu tindakan" variant="ghost" color="neutral" size="xs" />
               </UDropdownMenu>
             </td>
           </tr>

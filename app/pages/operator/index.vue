@@ -2,6 +2,7 @@
 import { signOut } from '../../utils/auth-client'
 import { apiFetch } from '../../composables/useApi'
 import { QUEUE_STATUS_COLOR, QUEUE_STATUS_LABEL } from '../../../shared/utils/queue-format'
+import { PRIORITY_LABEL, isPriorityQueue } from '../../../shared/constants/queue'
 import { SOCKET_EVENTS } from '../../../shared/constants/socket'
 
 definePageMeta({ layout: false, middleware: 'auth' })
@@ -9,6 +10,8 @@ useHead({ title: 'Operator' })
 
 const { me, reset } = useMe()
 const { call } = useApi()
+// Warna layanan dipilih admin; disesuaikan agar tetap terbaca di tema gelap.
+const { readable } = useReadableColor()
 const toast = useToast()
 
 interface QueueRow {
@@ -16,6 +19,7 @@ interface QueueRow {
   queueNumber: string
   status: string
   recallCount: number
+  priority: number
   createdAt: string
   calledAt: string | null
   finishedAt: string | null
@@ -126,17 +130,31 @@ async function recall() {
   })
 }
 
-async function callSpecific(queueId: string) {
-  await runAction('call' + queueId, async () => {
+/**
+ * Panggil satu nomor tertentu.
+ *
+ * `priority` memanggil sekaligus mencatatnya sebagai antrean prioritas: layar
+ * menampilkan penanda khusus, suara menyebutkannya lebih dulu, dan penandaannya
+ * tersimpan di riwayat serta ekspor.
+ */
+async function callSpecific(queueId: string, options: { priority?: boolean } = {}) {
+  await runAction((options.priority ? 'priority' : 'call') + queueId, async () => {
     const result = await call<{ queueNumber: string }>(
       `/api/operator/queue/${queueId}/call`,
-      { method: 'POST', body: { counterId: currentAssignment.value?.counter?.id ?? null } },
+      {
+        method: 'POST',
+        body: {
+          counterId: currentAssignment.value?.counter?.id ?? null,
+          ...(options.priority ? { priority: true } : {}),
+        },
+      },
     )
     if (result) {
       speech.announceQueue({
         queueNumber: result.queueNumber,
         queueTypeName: board.value?.assignment.queueType.name,
         counterName: currentAssignment.value?.counter?.name ?? null,
+        priority: options.priority,
       })
     }
     await loadBoard()
@@ -255,10 +273,12 @@ function timeOf(value: string | null) {
             :icon="speech.settings.enabled ? 'i-lucide-volume-2' : 'i-lucide-volume-x'"
             variant="ghost"
             color="neutral"
+            :aria-label="speech.settings.enabled ? 'Matikan suara panggilan' : 'Nyalakan suara panggilan'"
             :title="speech.settings.enabled ? 'Matikan suara' : 'Nyalakan suara'"
             @click="speech.settings.enabled = !speech.settings.enabled"
           />
-          <UButton icon="i-lucide-refresh-cw" variant="ghost" color="neutral" :loading="loading" @click="loadBoard" />
+          <UButton icon="i-lucide-refresh-cw" aria-label="Muat ulang papan antrean" title="Muat ulang papan antrean" variant="ghost" color="neutral" :loading="loading" @click="loadBoard" />
+          <UiThemeToggle />
           <UDropdownMenu
             :items="[
               [{ label: me?.user.name ?? '', type: 'label' as const }],
@@ -266,7 +286,7 @@ function timeOf(value: string | null) {
               [{ label: 'Keluar', icon: 'i-lucide-log-out', color: 'error' as const, onSelect: onSignOut }],
             ]"
           >
-            <UButton icon="i-lucide-user" variant="ghost" color="neutral" />
+            <UButton icon="i-lucide-user" aria-label="Menu akun" title="Menu akun" variant="ghost" color="neutral" />
           </UDropdownMenu>
         </div>
       </div>
@@ -310,7 +330,7 @@ function timeOf(value: string | null) {
             <div v-if="board.current" class="mt-2">
               <p
                 class="queue-number text-7xl sm:text-8xl"
-                :style="{ color: board.current.queueType.color }"
+                :style="{ color: readable(board.current.queueType.color) }"
               >
                 {{ board.current.queueNumber }}
               </p>
@@ -318,6 +338,14 @@ function timeOf(value: string | null) {
                 {{ board.current.visitor?.fullName || 'Tanpa nama' }}
               </p>
               <div class="mt-1 flex flex-wrap items-center justify-center gap-2 text-sm text-slate-500">
+                <UBadge
+                  v-if="isPriorityQueue(board.current.priority)"
+                  size="sm"
+                  color="warning"
+                  variant="solid"
+                  icon="i-lucide-accessibility"
+                  :label="PRIORITY_LABEL"
+                />
                 <span>Dipanggil {{ timeOf(board.current.calledAt) }}</span>
                 <span v-if="board.current.recallCount">· dipanggil ulang {{ board.current.recallCount }}×</span>
                 <UBadge
@@ -496,11 +524,29 @@ v-for="stat in [
                 <span class="min-w-0 flex-1 truncate text-sm text-slate-500">
                   {{ row.visitor?.fullName || '—' }}
                 </span>
+                <UBadge
+                  v-if="isPriorityQueue(row.priority)"
+                  size="sm"
+                  color="warning"
+                  variant="subtle"
+                  :label="PRIORITY_LABEL"
+                />
+                <UButton
+                  size="xs"
+                  variant="ghost"
+                  color="warning"
+                  icon="i-lucide-accessibility"
+                  aria-label="Panggil sebagai antrean prioritas"
+                  title="Panggil sebagai prioritas — lansia, disabilitas, ibu hamil"
+                  :loading="acting === 'priority' + row.id"
+                  @click="callSpecific(row.id, { priority: true })"
+                />
                 <UButton
                   size="xs"
                   variant="ghost"
                   color="neutral"
                   icon="i-lucide-megaphone"
+                  aria-label="Panggil nomor ini"
                   title="Panggil nomor ini"
                   :loading="acting === 'call' + row.id"
                   @click="callSpecific(row.id)"

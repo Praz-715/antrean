@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { CANVAS, type WidgetType } from '../../../shared/constants/widgets'
+import { PRIORITY_LABEL, isPriorityQueue } from '../../../shared/constants/queue'
 
 /**
  * Menggambar satu template display pada kanvas 1920×1080, lalu menskalakannya
@@ -26,7 +27,7 @@ export interface RenderWidget {
 
 export interface BoardEntry {
   queueType: { id: string, code: string, name: string, color: string }
-  current: { queueNumber: string, status: string, counter: { name: string } | null } | null
+  current: { queueNumber: string, status: string, priority?: number, counter: { name: string } | null } | null
   waitingCount: number
   nextNumbers: string[]
 }
@@ -188,6 +189,14 @@ const dateText = computed(() => now.value.toLocaleDateString('id-ID', { weekday:
       >
         <!-- Nomor yang sedang dipanggil -->
         <template v-if="widget.type === 'CURRENT_QUEUE'">
+          <p
+            v-if="isPriorityQueue(entryFor(widget)?.current?.priority)"
+            data-priority-badge
+            class="w-full truncate font-extrabold uppercase tracking-[0.2em] text-amber-400"
+            :style="{ fontSize: '0.2em' }"
+          >
+            ★ {{ PRIORITY_LABEL }}
+          </p>
           <p v-if="widget.config?.showQueueTypeName !== false" class="w-full truncate opacity-70" :style="{ fontSize: '0.22em' }">
             {{ entryFor(widget)?.queueType.name ?? (preview ? 'Pelayanan Umum' : '—') }}
           </p>

@@ -24,6 +24,8 @@ interface QueueRow {
 }
 
 const { current, currentId, loadEvents } = useCurrentEvent()
+// Warna layanan dipilih admin; disesuaikan agar tetap terbaca di tema gelap.
+const { readable } = useReadableColor()
 await loadEvents()
 
 // tanggal layanan mengikuti zona waktu event, bukan UTC
@@ -100,14 +102,14 @@ function shiftDate(days: number) {
     </UiPageHeading>
 
     <div class="mb-4 flex flex-wrap items-center gap-2">
-      <UButton icon="i-lucide-chevron-left" variant="outline" color="neutral" @click="shiftDate(-1)" />
-      <UInput v-model="date" type="date" class="w-44" />
-      <UButton icon="i-lucide-chevron-right" variant="outline" color="neutral" :disabled="date >= today" @click="shiftDate(1)" />
+      <UButton icon="i-lucide-chevron-left" aria-label="Hari sebelumnya" title="Hari sebelumnya" variant="outline" color="neutral" @click="shiftDate(-1)" />
+      <UInput v-model="date" type="date" class="w-44" aria-label="Tanggal layanan" title="Tanggal layanan" />
+      <UButton icon="i-lucide-chevron-right" aria-label="Hari berikutnya" title="Hari berikutnya" variant="outline" color="neutral" :disabled="date >= today" @click="shiftDate(1)" />
       <UButton variant="ghost" color="neutral" label="Hari ini" :disabled="date === today" @click="date = today" />
 
       <USelect v-model="status" :items="statusOptions" class="w-44" />
       <UInput v-model="search" icon="i-lucide-search" placeholder="Cari nomor / nama…" class="w-56" />
-      <UButton class="ml-auto" icon="i-lucide-refresh-cw" variant="outline" color="neutral" :loading="pending" @click="load" />
+      <UButton class="ml-auto" icon="i-lucide-refresh-cw" aria-label="Muat ulang data" title="Muat ulang data" variant="outline" color="neutral" :loading="pending" @click="load" />
     </div>
 
     <div class="overflow-x-auto rounded-xl border border-slate-200 bg-white dark:border-slate-800 dark:bg-slate-900">
@@ -148,7 +150,7 @@ function shiftDate(days: number) {
           </tr>
           <tr v-for="row in items" :key="row.id" class="hover:bg-slate-50 dark:hover:bg-slate-800/40">
             <td class="px-4 py-2.5">
-              <span class="queue-number text-base" :style="{ color: row.queueType.color }">{{ row.queueNumber }}</span>
+              <span class="queue-number text-base" :style="{ color: readable(row.queueType.color) }">{{ row.queueNumber }}</span>
             </td>
             <td class="px-4 py-2.5 text-slate-600 dark:text-slate-300">
               {{ row.queueType.name }}
@@ -186,9 +188,9 @@ function shiftDate(days: number) {
         {{ total }} antrean pada {{ date }}
       </p>
       <div v-if="totalPages > 1" class="flex items-center gap-2">
-        <UButton size="sm" variant="outline" color="neutral" icon="i-lucide-chevron-left" :disabled="page <= 1" @click="page--" />
+        <UButton size="sm" variant="outline" color="neutral" icon="i-lucide-chevron-left" aria-label="Halaman sebelumnya" title="Halaman sebelumnya" :disabled="page <= 1" @click="page--" />
         <span class="text-sm text-slate-500">{{ page }} / {{ totalPages }}</span>
-        <UButton size="sm" variant="outline" color="neutral" icon="i-lucide-chevron-right" :disabled="page >= totalPages" @click="page++" />
+        <UButton size="sm" variant="outline" color="neutral" icon="i-lucide-chevron-right" aria-label="Halaman berikutnya" title="Halaman berikutnya" :disabled="page >= totalPages" @click="page++" />
       </div>
     </div>
   </div>

@@ -1,16 +1,76 @@
 <script setup lang="ts">
 import { apiFetch } from '../../composables/useApi'
 import { SOCKET_EVENTS } from '../../../shared/constants/socket'
+import { PRIORITY_LABEL, isPriorityQueue } from '../../../shared/constants/queue'
 
 definePageMeta({ layout: false })
 
 const route = useRoute()
 const deviceCode = route.params.deviceCode as string
+
+/**
+ * Papan display GELAP secara bawaan, bukan mengikuti tema sistem.
+ *
+ * Layar antrean dipasang di ruang tunggu dan dibaca dari jauh; latar gelap dengan
+ * nomor berwarna besar jauh lebih terbaca, dan itulah tampilan yang sudah dipakai
+ * perangkat di lapangan. Perangkat TV tidak pernah memilih tema sendiri, jadi
+ * tampilannya tidak berubah — hanya yang menekan sakelar tema dan memilih "terang"
+ * yang mendapat papan terang. Kelas `dark` ditempel pada akar halaman ini sendiri
+ * supaya varian `dark:` tetap berlaku walau `<html>` tidak bertanda gelap.
+ *
+ * Nilainya TIDAK dibaca dari `colorMode.preference` saat render: saat hidrasi,
+ * state itu masih berisi nilai bawaan (`system`) walaupun localStorage sudah berisi
+ * `light` — terbukti papan tetap gelap sesudah muat ulang. Jadi pilihan tersimpan
+ * dibaca langsung sesudah terpasang, lalu perubahan berikutnya diikuti lewat watch.
+ */
+const colorMode = useColorMode()
+/** Kunci penyimpanan bawaan @nuxtjs/color-mode. */
+const COLOR_MODE_KEY = 'nuxt-color-mode'
+
+/**
+ * Gelap secara bawaan; jadi terang HANYA bila pengguna memang memilih terang.
+ *
+ * Pilihan tema dibaca dari penyimpanan sesudah komponen terpasang, bukan dari
+ * `colorMode.preference` saat render: pada saat hidrasi state itu masih berisi nilai
+ * bawaan walau localStorage sudah berisi "light". Perubahan sesudahnya (pengguna
+ * menekan sakelar tema di layar ini) diikuti lewat watch.
+ */
+const boardDark = ref(true)
+const boardRoot = ref<HTMLElement | null>(null)
+
+onMounted(() => {
+  boardDark.value = window.localStorage.getItem(COLOR_MODE_KEY) !== 'light'
+})
+
+watch(() => colorMode.preference, (pref) => {
+  if (pref === 'light' || pref === 'dark') boardDark.value = pref === 'dark'
+})
+
+/**
+ * Kelas `dark` ditulis LANGSUNG ke elemen akar, bukan lewat `:class`.
+ *
+ * Kelas terikat sudah dicoba dan hasilnya salah: sesudah muat ulang, nilainya sudah
+ * "terang" (terbukti dari atribut lain pada elemen yang sama) tetapi kelas `dark`
+ * warisan render server tidak pernah dilepas, sehingga papan tetap gelap. Karena
+ * kelasnya statis di template, Vue tidak pernah menambalnya lagi — jadi penulisan
+ * langsung ini aman dan tidak akan saling menimpa. Render server tetap gelap,
+ * sehingga layar tidak berkedip putih saat perangkat menyala.
+ */
+watch(boardDark, (dark) => {
+  boardRoot.value?.classList.toggle('dark', dark)
+}, { flush: 'post' })
 const TOKEN_KEY = `antrean:display-token:${deviceCode}`
 
 interface BoardEntry {
   queueType: { id: string, code: string, name: string, color: string, icon: string | null }
-  current: { queueNumber: string, status: string, recallCount: number, lastCalledAt: string | null, counter: { code: string, name: string } | null } | null
+  current: {
+    queueNumber: string
+    status: string
+    recallCount: number
+    priority: number
+    lastCalledAt: string | null
+    counter: { code: string, name: string } | null
+  } | null
   waitingCount: number
   nextNumbers: string[]
   lastCompleted: string | null
@@ -81,16 +141,20 @@ async function ensurePaired() {
   catch { /* sudah dipasangkan di browser lain — tetap boleh menampilkan lewat polling */ }
 }
 
-// ---- jam ----
-const now = ref(new Date())
-let clockTimer: ReturnType<typeof setInterval> | undefined
-onMounted(() => { clockTimer = setInterval(() => { now.value = new Date() }, 1000) })
-onBeforeUnmount(() => clearInterval(clockTimer))
+/**
+ * Jam layar.
+ *
+ * Waktu acuannya ikut terkirim dari server (lihat `useNow`) supaya detik yang
+ * dirender server dan yang dihidrasi klien sama — kalau tidak, Vue melaporkan
+ * mismatch hidrasi dan membuang DOM yang sudah tergambar. Berdetak tiap detik,
+ * jadi memakai kunci state sendiri.
+ */
+const now = useNow({ intervalMs: 1000, key: 'antrean:display-clock' })
 
 const timeText = computed(() =>
-  now.value.toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit', second: '2-digit' }))
+  new Date(now.value).toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit', second: '2-digit' }))
 const dateText = computed(() =>
-  now.value.toLocaleDateString('id-ID', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' }))
+  new Date(now.value).toLocaleDateString('id-ID', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' }))
 
 // ---- realtime + suara ----
 const speech = useSpeech({ language: 'id-ID', repeat: 2 })
@@ -123,19 +187,38 @@ interface CallPayload {
   queueTypeId: string
   queueTypeName: string
   counterName: string | null
+  priority?: number
 }
+
+/**
+ * Nomor prioritas ditandai dua kali: dari siaran (supaya sorotannya muncul
+ * seketika) dan dari papan hasil `loadState()` (supaya penandanya tetap ada
+ * setelah layar dimuat ulang atau saat jatuh ke polling).
+ */
+const priorityCall = ref<string | null>(null)
 
 function onCalled(payload: CallPayload) {
   highlighted.value = payload.queueNumber
+  const priority = isPriorityQueue(payload.priority)
+  priorityCall.value = priority ? payload.queueNumber : null
+
   speech.announceQueue({
     queueNumber: payload.queueNumber,
     queueTypeName: payload.queueTypeName,
     counterName: payload.counterName,
+    priority,
   })
   setTimeout(() => {
     if (highlighted.value === payload.queueNumber) highlighted.value = null
+    if (priorityCall.value === payload.queueNumber) priorityCall.value = null
   }, 12_000)
   void loadState()
+}
+
+/** Nomor yang sedang dipanggil pada satu layanan sedang berprioritas? */
+function isPriorityEntry(entry: BoardEntry) {
+  return isPriorityQueue(entry.current?.priority)
+    || (!!entry.current && priorityCall.value === entry.current.queueNumber)
 }
 
 on<CallPayload>(SOCKET_EVENTS.QUEUE_CALLED, onCalled)
@@ -164,6 +247,14 @@ onMounted(async () => {
 })
 onBeforeUnmount(() => clearInterval(pollTimer))
 
+/**
+ * Layar penuh (§17).
+ *
+ * Ditekan sekali saat perangkat dipasang; sesudahnya bilah alamat peramban tidak
+ * lagi memakan ruang yang seharusnya menjadi nomor antrean.
+ */
+const { isFullscreen, supported: fullscreenSupported, toggle: toggleFullscreen } = useFullscreen()
+
 /** Browser memblokir suara sampai ada interaksi pengguna — sediakan satu tombol. */
 function unlockAudio() {
   speech.speak('Pengumuman suara aktif.', 1)
@@ -188,14 +279,17 @@ function lastUpdateText() {
 </script>
 
 <template>
-  <div class="flex min-h-screen flex-col bg-slate-950 text-white">
+  <div
+    ref="boardRoot"
+    class="dark flex min-h-screen flex-col bg-white text-slate-900 dark:bg-slate-950 dark:text-white"
+  >
     <div v-if="loadError" class="flex flex-1 items-center justify-center">
       <div class="text-center">
-        <UIcon name="i-lucide-monitor-x" class="mx-auto size-16 text-slate-600" />
+        <UIcon name="i-lucide-monitor-x" class="mx-auto size-16 text-slate-400 dark:text-slate-600" />
         <p class="mt-4 text-2xl font-bold">
           Display tidak ditemukan
         </p>
-        <p class="mt-2 text-slate-400">
+        <p class="mt-2 text-slate-500 dark:text-slate-400">
           {{ loadError }}
         </p>
       </div>
@@ -216,7 +310,7 @@ function lastUpdateText() {
       />
 
       <!-- Baris status tetap ada supaya perangkat tetap bisa dipantau -->
-      <footer class="flex items-center gap-4 border-t border-slate-800 bg-slate-900 px-6 py-2 text-xs text-slate-500">
+      <footer class="flex items-center gap-4 border-t border-slate-200 bg-slate-100 px-6 py-2 text-xs text-slate-500 dark:border-slate-800 dark:bg-slate-900">
         <span class="flex items-center gap-1.5">
           <span class="size-1.5 rounded-full" :class="connected ? 'animate-pulse bg-emerald-400' : 'bg-rose-400'" />
           {{ connected ? 'ONLINE' : rejected ? 'PERLU PAIRING ULANG' : 'OFFLINE' }}
@@ -225,11 +319,23 @@ function lastUpdateText() {
         <button
           v-if="!audioUnlocked && voiceEnabled"
           type="button"
-          class="rounded-full bg-white/10 px-3 py-1 font-medium text-white hover:bg-white/20"
+          class="rounded-full bg-slate-900/10 px-3 py-1 font-medium text-slate-700 hover:bg-slate-900/20 dark:bg-white/10 dark:text-white dark:hover:bg-white/20"
           @click="unlockAudio"
         >
           Aktifkan Suara
         </button>
+        <button
+          v-if="fullscreenSupported"
+          type="button"
+          class="flex items-center gap-1.5 rounded-full bg-slate-900/10 px-3 py-1 font-medium text-slate-700 hover:bg-slate-900/20 dark:bg-white/10 dark:text-white dark:hover:bg-white/20"
+          :aria-label="isFullscreen ? 'Keluar dari layar penuh' : 'Tampilkan layar penuh'"
+          :title="isFullscreen ? 'Keluar dari layar penuh' : 'Tampilkan layar penuh'"
+          @click="toggleFullscreen"
+        >
+          <UIcon :name="isFullscreen ? 'i-lucide-minimize' : 'i-lucide-maximize'" class="size-3.5" />
+          {{ isFullscreen ? 'Keluar' : 'Layar Penuh' }}
+        </button>
+        <UiThemeToggle size="xs" />
         <span class="ml-auto truncate">{{ state.device.name }} · {{ lastUpdateText() }}</span>
       </footer>
     </template>
@@ -287,10 +393,14 @@ function lastUpdateText() {
           <div
             v-for="entry in state.board"
             :key="entry.queueType.id"
-            class="flex flex-col rounded-3xl border-2 bg-slate-900/80 p-8 transition-all duration-500"
-            :class="highlighted && entry.current?.queueNumber === highlighted
-              ? 'scale-[1.02] border-white shadow-[0_0_60px_rgba(255,255,255,0.25)]'
-              : 'border-slate-800'"
+            class="flex flex-col rounded-3xl border-2 bg-slate-50 p-8 transition-all duration-500 dark:bg-slate-900/80"
+            :class="[
+              highlighted && entry.current?.queueNumber === highlighted
+                ? isPriorityEntry(entry)
+                  ? 'scale-[1.02] border-amber-400 shadow-[0_0_70px_rgba(251,191,36,0.45)]'
+                  : 'scale-[1.02] border-slate-900 shadow-[0_0_60px_rgba(15,23,42,0.18)] dark:border-white dark:shadow-[0_0_60px_rgba(255,255,255,0.25)]'
+                : isPriorityEntry(entry) ? 'border-amber-500/60' : 'border-slate-200 dark:border-slate-800',
+            ]"
           >
             <div class="mb-4 flex items-center gap-3">
               <span
@@ -305,7 +415,16 @@ function lastUpdateText() {
             </div>
 
             <div class="flex flex-1 flex-col items-center justify-center">
-              <p class="text-sm uppercase tracking-[0.3em] text-slate-500">
+              <!-- Penanda prioritas: harus terbaca dari jauh, bukan sekadar warna -->
+              <p
+                v-if="isPriorityEntry(entry)"
+                data-priority-badge
+                class="mb-2 flex items-center gap-2 rounded-full bg-amber-400 px-4 py-1 text-sm font-extrabold uppercase tracking-[0.2em] text-slate-950"
+              >
+                <UIcon name="i-lucide-accessibility" class="size-4" />
+                {{ PRIORITY_LABEL }}
+              </p>
+              <p class="text-sm uppercase tracking-[0.3em] text-slate-500 dark:text-slate-400">
                 Nomor dilayani
               </p>
               <p
@@ -314,58 +433,72 @@ function lastUpdateText() {
                   isSingle ? 'text-[14rem]' : 'text-[8rem]',
                   highlighted === entry.current?.queueNumber ? 'animate-pulse' : '',
                 ]"
-                :style="{ color: entry.current ? entry.queueType.color : '#334155' }"
+                :style="{ color: entry.current ? entry.queueType.color : (boardDark ? '#334155' : '#cbd5e1') }"
               >
                 {{ entry.current?.queueNumber ?? '—' }}
               </p>
 
               <p v-if="entry.current?.counter" class="mt-4 text-center">
-                <span class="block text-sm uppercase tracking-[0.3em] text-slate-500">Silakan ke</span>
+                <span class="block text-sm uppercase tracking-[0.3em] text-slate-500 dark:text-slate-400">Silakan ke</span>
                 <span class="text-3xl font-bold">{{ entry.current.counter.name }}</span>
               </p>
-              <p v-else class="mt-4 text-slate-500">
+              <p v-else class="mt-4 text-slate-500 dark:text-slate-400">
                 Menunggu panggilan
               </p>
             </div>
 
-            <div class="mt-6 border-t border-slate-800 pt-4">
-              <div class="flex items-center justify-between text-sm text-slate-400">
-                <span>Menunggu: <b class="text-slate-200">{{ entry.waitingCount }}</b></span>
+            <div class="mt-6 border-t border-slate-200 pt-4 dark:border-slate-800">
+              <div class="flex items-center justify-between text-sm text-slate-500 dark:text-slate-400">
+                <span>Menunggu: <b class="text-slate-800 dark:text-slate-200">{{ entry.waitingCount }}</b></span>
                 <span v-if="entry.nextNumbers.length" class="truncate">
-                  Berikutnya: <b class="text-slate-200">{{ entry.nextNumbers.slice(0, 3).join(' · ') }}</b>
+                  Berikutnya: <b class="text-slate-800 dark:text-slate-200">{{ entry.nextNumbers.slice(0, 3).join(' · ') }}</b>
                 </span>
               </div>
             </div>
           </div>
 
-          <div v-if="!state.board.length" class="col-span-full flex items-center justify-center text-slate-500">
+          <div v-if="!state.board.length" class="col-span-full flex items-center justify-center text-slate-500 dark:text-slate-400">
             Belum ada jenis antrean aktif pada event ini.
           </div>
         </div>
       </main>
 
       <!-- Running text -->
-      <footer class="flex items-center gap-6 border-t border-slate-800 bg-slate-900 px-8 py-3 text-sm">
+      <footer class="flex items-center gap-6 border-t border-slate-200 bg-slate-100 px-8 py-3 text-sm dark:border-slate-800 dark:bg-slate-900">
         <div v-if="runningText" class="relative flex-1 overflow-hidden">
-          <div class="animate-[marquee_28s_linear_infinite] whitespace-nowrap text-slate-300">
+          <div class="animate-[marquee_28s_linear_infinite] whitespace-nowrap text-slate-700 dark:text-slate-300">
             {{ runningText }}
           </div>
         </div>
-        <div v-else class="flex-1 truncate text-slate-500">
+        <div v-else class="flex-1 truncate text-slate-500 dark:text-slate-400">
           {{ state.openState.message }}
         </div>
 
         <button
           v-if="!audioUnlocked && voiceEnabled"
           type="button"
-          class="flex items-center gap-2 rounded-full bg-white/10 px-4 py-1.5 font-medium text-white hover:bg-white/20"
+          class="flex items-center gap-2 rounded-full bg-slate-900/10 px-4 py-1.5 font-medium text-slate-700 hover:bg-slate-900/20 dark:bg-white/10 dark:text-white dark:hover:bg-white/20"
           @click="unlockAudio"
         >
           <UIcon name="i-lucide-volume-2" class="size-4" />
           Aktifkan Suara
         </button>
 
-        <span class="whitespace-nowrap text-xs text-slate-500">
+        <button
+          v-if="fullscreenSupported"
+          type="button"
+          class="flex shrink-0 items-center gap-2 rounded-full bg-slate-900/10 px-4 py-1.5 font-medium text-slate-700 hover:bg-slate-900/20 dark:bg-white/10 dark:text-white dark:hover:bg-white/20"
+          :aria-label="isFullscreen ? 'Keluar dari layar penuh' : 'Tampilkan layar penuh'"
+          :title="isFullscreen ? 'Keluar dari layar penuh' : 'Tampilkan layar penuh'"
+          @click="toggleFullscreen"
+        >
+          <UIcon :name="isFullscreen ? 'i-lucide-minimize' : 'i-lucide-maximize'" class="size-4" />
+          {{ isFullscreen ? 'Keluar Layar Penuh' : 'Layar Penuh' }}
+        </button>
+
+        <UiThemeToggle size="xs" />
+
+        <span class="whitespace-nowrap text-xs text-slate-500 dark:text-slate-400">
           {{ state.device.name }} · {{ lastUpdateText() }}
           <template v-if="rejected"> · {{ lastError }} — reset pairing dari panel admin</template>
         </span>
