@@ -23,6 +23,33 @@ export default defineNitroPlugin((nitroApp) => {
   registerSocketHandlers(io)
   registerIo(io)
 
+  /**
+   * Koneksi yang putus mendadak TIDAK boleh menjatuhkan server.
+   *
+   * Perangkat display dicabut dari listrik, ponsel pengunjung kehilangan sinyal,
+   * atau tab ditutup di tengah upgrade websocket — semuanya berakhir sebagai
+   * `ECONNRESET` pada socket yang sudah tidak punya penangan. Node menganggap
+   * penolakan tanpa penangan sebagai galat fatal, jadi satu pengunjung yang
+   * kehilangan sinyal cukup untuk mematikan proses yang melayani seluruh loket.
+   * Terbukti terjadi: server dev mati beberapa kali saat peramban uji ditutup paksa.
+   *
+   * Yang diredam hanya galat jaringan yang memang tidak bisa ditindaklanjuti;
+   * galat lain tetap dicatat apa adanya.
+   */
+  const GALAT_JARINGAN_BIASA = new Set(['ECONNRESET', 'EPIPE', 'ECANCELED', 'ETIMEDOUT'])
+
+  engine.on('connection', (socket: { on: (ev: string, cb: (e: unknown) => void) => void }) => {
+    socket.on('error', (error) => {
+      const code = (error as { code?: string })?.code
+      if (code && GALAT_JARINGAN_BIASA.has(code)) return
+      log.warn('galat socket', { message: (error as Error)?.message ?? String(error) })
+    })
+  })
+
+  engine.on('connection_error', (error: { code?: number, message?: string }) => {
+    log.debug('koneksi socket ditolak', { code: error?.code, message: error?.message })
+  })
+
   nitroApp.router.use(
     `${SOCKET_PATH}/`,
     defineEventHandler({
@@ -38,6 +65,14 @@ export default defineNitroPlugin((nitroApp) => {
             log.warn('upgrade websocket tanpa konteks node, mengandalkan fallback polling')
             return
           }
+          /**
+           * Socket mentahnya diberi penangan galat sebelum diserahkan ke engine.io.
+           * Klien yang pergi di tengah upgrade websocket meninggalkan ECONNRESET pada
+           * socket ini; tanpa penangan, galatnya naik menjadi unhandled rejection.
+           */
+          const rawSocket = nodeReq.socket as { on?: (ev: string, cb: (e: unknown) => void) => void }
+          rawSocket.on?.('error', () => {})
+
           // @ts-expect-error API internal engine.io
           engine.prepare(nodeReq)
           // @ts-expect-error API internal engine.io

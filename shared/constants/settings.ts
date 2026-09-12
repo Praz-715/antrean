@@ -19,12 +19,18 @@ export const SETTING_KEYS = {
   FEEDBACK_AUTO_APPROVE: 'feedback.autoApprove',
   DISPLAY_VOICE_ENABLED: 'display.voiceEnabled',
   DISPLAY_VOICE_LANGUAGE: 'display.voiceLanguage',
+  DISPLAY_VOICE_PROVIDER: 'display.voiceProvider',
+  DISPLAY_VOICE_EXTERNAL_URL: 'display.voiceExternalUrl',
+  DISPLAY_VOICE_CHIME_MEDIA_ID: 'display.voiceChimeMediaId',
   DISPLAY_TIMEOUT_SECONDS: 'display.timeoutSeconds',
   SYSTEM_TIMEZONE: 'system.timezone',
   SYSTEM_SESSION_MINUTES: 'system.sessionDurationMinutes',
 } as const
 
 export type SettingKey = (typeof SETTING_KEYS)[keyof typeof SETTING_KEYS]
+
+/** Nada bawaan sistem memakai awalan ini; sisanya dianggap id berkas Media Library. */
+export const SYSTEM_TONE_VALUE_PREFIX = 'system:'
 
 export type SettingValue = boolean | number | string
 
@@ -33,7 +39,11 @@ export interface SettingDefinition {
   label: string
   help: string
   group: SettingGroupKey
-  type: 'boolean' | 'number' | 'text' | 'select'
+  /**
+   * `media` = pilih berkas dari Media Library; nilainya disimpan sebagai id media.
+   * Pilihannya tidak bisa ditulis di katalog karena isinya berubah-ubah.
+   */
+  type: 'boolean' | 'number' | 'text' | 'select' | 'media'
   default: SettingValue
   min?: number
   max?: number
@@ -42,6 +52,10 @@ export interface SettingDefinition {
   options?: Array<{ label: string, value: string }>
   /** Nilai ini juga bisa ditimpa per-event lewat `events.settings`. */
   eventOverride?: string
+  /** Untuk `type: 'media'` — jenis berkas yang boleh dipilih. */
+  mediaType?: 'IMAGE' | 'VIDEO' | 'AUDIO'
+  /** Kolom hanya tampil bila kunci lain bernilai tertentu. */
+  showWhen?: { key: SettingKey, equals: SettingValue }
 }
 
 export type SettingGroupKey = 'queue' | 'feedback' | 'display' | 'system'
@@ -188,6 +202,40 @@ export const SETTINGS_CATALOG: SettingDefinition[] = [
     eventOverride: 'voiceLanguage',
   },
   {
+    key: SETTING_KEYS.DISPLAY_VOICE_PROVIDER,
+    label: 'Sumber suara',
+    help: 'Suara peramban membacakan nomornya (tidak perlu internet). TTS eksternal dipakai bila butuh suara yang lebih manusiawi. "Hanya nada panggil" tidak membacakan nomor sama sekali — cukup bunyi dari Media Library, cocok bila nomornya sudah jelas terbaca di layar.',
+    group: 'display',
+    type: 'select',
+    default: 'browser',
+    options: [
+      { label: 'Suara peramban (bawaan)', value: 'browser' },
+      { label: 'TTS eksternal', value: 'external' },
+      { label: 'Hanya nada panggil (tanpa suara bicara)', value: 'chime' },
+    ],
+    eventOverride: 'voiceProvider',
+  },
+  {
+    key: SETTING_KEYS.DISPLAY_VOICE_EXTERNAL_URL,
+    label: 'URL TTS eksternal',
+    help: 'Alamat layanan TTS yang mengembalikan berkas audio. Gunakan {text} untuk kalimat dan {lang} untuk bahasa, mis. https://tts.instansi.go.id/say?lang={lang}&q={text}. Layar TIDAK memanggil alamat ini langsung — permintaannya lewat server, jadi kunci API di dalam URL tidak ikut terlihat di perangkat.',
+    group: 'display',
+    type: 'text',
+    default: '',
+    maxLength: 500,
+    showWhen: { key: 'display.voiceProvider', equals: 'external' },
+  },
+  {
+    key: SETTING_KEYS.DISPLAY_VOICE_CHIME_MEDIA_ID,
+    label: 'Nada panggil',
+    help: 'Nada bawaan sistem atau berkas dari Media Library, dibunyikan sebelum nomor dibacakan — atau sebagai satu-satunya bunyi, bila sumber suaranya "Hanya nada panggil".',
+    group: 'display',
+    type: 'media',
+    mediaType: 'AUDIO',
+    default: '',
+    eventOverride: 'voiceChimeMediaId',
+  },
+  {
     key: SETTING_KEYS.DISPLAY_TIMEOUT_SECONDS,
     label: 'Ambang display dianggap offline',
     help: 'Layar yang tidak mengirim kabar selama durasi ini ditandai OFFLINE di daftar perangkat.',
@@ -255,5 +303,18 @@ export function coerceSetting(def: SettingDefinition, raw: unknown): SettingValu
     }
     case 'text':
       return String(raw).slice(0, def.maxLength ?? 190)
+    /**
+     * Dua bentuk yang sah: nada bawaan sistem (`system:tone3`) atau id berkas Media
+     * Library (ULID 26 karakter). Keduanya hanya diperiksa BENTUKNYA di sini; apakah
+     * berkasnya benar-benar ada diperiksa saat layar meminta state-nya, karena berkas
+     * bisa dihapus jauh setelah dipilih.
+     */
+    case 'media': {
+      const id = String(raw).trim()
+      if (id.startsWith(SYSTEM_TONE_VALUE_PREFIX)) {
+        return /^system:[a-z0-9-]{1,40}$/i.test(id) ? id : ''
+      }
+      return /^[0-9A-HJKMNP-TV-Z]{26}$/i.test(id) ? id : ''
+    }
   }
 }

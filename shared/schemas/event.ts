@@ -19,6 +19,13 @@ export const eventSettingsSchema = z.object({
   ratingEnabled: z.boolean().optional(),
   voiceEnabled: z.boolean().optional(),
   voiceLanguage: z.string().max(10).optional(),
+  /** Sumber suara panggilan; kosongkan agar ikut pengaturan sistem. */
+  voiceProvider: z.enum(['browser', 'external', 'chime']).optional(),
+  /**
+   * Nada panggil: `system:toneN` (bawaan) atau id berkas Media Library.
+   * String kosong = sengaja tanpa nada di event ini.
+   */
+  voiceChimeMediaId: z.string().trim().max(48).optional(),
 }).partial()
 
 export const createEventSchema = z.object({

@@ -2,6 +2,7 @@
 import { apiFetch } from '../../composables/useApi'
 import { SOCKET_EVENTS } from '#shared/constants/socket'
 import { PRIORITY_LABEL, isPriorityQueue } from '#shared/constants/queue'
+import { announcementText } from '../../composables/useSpeech'
 
 definePageMeta({ layout: false })
 
@@ -113,7 +114,14 @@ interface DisplayState {
   organization: { name: string, logoUrl: string | null } | null
   branding: { primaryColor?: string, secondaryColor?: string } | null
   serviceDate: string
-  settings: { voiceEnabled: boolean, voiceLanguage: string }
+  settings: {
+    voiceEnabled: boolean
+    voiceLanguage: string
+    /** 'browser' = suara peramban, 'external' = TTS lewat proxy server. */
+    voiceProvider: string
+    /** Berkas nada panggil, sudah berupa URL siap putar (null bila tidak diatur). */
+    voiceChimeUrl: string | null
+  }
   openState: { isOpen: boolean, message: string, openTime: string | null, closeTime: string | null }
   board: BoardEntry[]
   counters: CounterBoardEntry[]
@@ -185,8 +193,50 @@ watchEffect(() => {
   speech.settings.enabled = state.value.settings.voiceEnabled
   speech.settings.language = state.value.settings.voiceLanguage
 })
+const callSound = useCallSound()
 const highlighted = ref<string | null>(null)
 const audioUnlocked = ref(false)
+
+/**
+ * Bunyikan panggilan: nada panggil dulu, baru suaranya.
+ *
+ * Sumber suaranya mengikuti pengaturan (yang boleh ditimpa per event): suara peramban,
+ * atau TTS eksternal yang diambil lewat endpoint server sendiri. Bila TTS eksternal
+ * gagal — layanannya mati, URL-nya salah — layar TIDAK diam saja, melainkan jatuh ke
+ * suara peramban. Layar antrean yang bisu jauh lebih merugikan daripada suara yang
+ * kurang bagus.
+ */
+async function announceCall(payload: CallPayload, priority: boolean) {
+  const settings = state.value?.settings
+  if (!settings?.voiceEnabled) return
+
+  const adaNada = !!settings.voiceChimeUrl
+  if (adaNada) {
+    await callSound.play(settings.voiceChimeUrl!, { timeoutMs: 8000 })
+  }
+
+  /**
+   * "Hanya nada panggil" berarti nomornya TIDAK dibacakan — nada tadi sudah selesai
+   * bertugas. Tetapi kalau nadanya belum diatur, layar tidak dibiarkan bisu: lebih
+   * baik terdengar suara peramban daripada panggilan yang tidak berbunyi sama sekali.
+   */
+  if (settings.voiceProvider === 'chime' && adaNada) return
+
+  const teks = announcementText({
+    queueNumber: payload.queueNumber,
+    queueTypeName: payload.queueTypeName,
+    counterName: payload.counterName,
+    priority,
+  })
+
+  if (settings.voiceProvider === 'external') {
+    const url = `/api/display/${deviceCode}/tts?text=${encodeURIComponent(teks)}`
+    const berhasil = await callSound.play(url, { timeoutMs: 12_000 })
+    if (berhasil) return
+  }
+
+  speech.speak(teks)
+}
 
 // auth dibaca sebagai fungsi supaya token terbaru ikut terkirim saat connect()
 const { connected, rejected, lastError, lastMessageAt, on, emit, connect } = useSocket(
@@ -218,12 +268,7 @@ function onCalled(payload: CallPayload) {
   const priority = isPriorityQueue(payload.priority)
   priorityCall.value = priority ? payload.queueNumber : null
 
-  speech.announceQueue({
-    queueNumber: payload.queueNumber,
-    queueTypeName: payload.queueTypeName,
-    counterName: payload.counterName,
-    priority,
-  })
+  void announceCall(payload, priority)
   setTimeout(() => {
     if (highlighted.value === payload.queueNumber) highlighted.value = null
     if (priorityCall.value === payload.queueNumber) priorityCall.value = null
@@ -272,10 +317,24 @@ onBeforeUnmount(() => clearInterval(pollTimer))
 const { isFullscreen, supported: fullscreenSupported, toggle: toggleFullscreen } = useFullscreen()
 
 /** Browser memblokir suara sampai ada interaksi pengguna — sediakan satu tombol. */
-function unlockAudio() {
+async function unlockAudio() {
   speech.speak('Pengumuman suara aktif.', 1)
+  // Elemen audio punya izinnya sendiri: nada panggil & TTS eksternal ikut dibuka di sini.
+  await callSound.unlock(state.value?.settings?.voiceChimeUrl)
   audioUnlocked.value = true
 }
+
+/**
+ * Nada panggil yang BARU dipilih admin ikut disiapkan tanpa menunggu ketukan lagi.
+ *
+ * Urutan yang sangat mungkin terjadi di lapangan: layar dinyalakan dan tombol
+ * "Aktifkan Suara" ditekan pagi-pagi, nadanya baru dipasang admin siang hari. Tanpa
+ * ini, elemen audio belum pernah menyentuh berkas itu dan panggilan pertama bisa
+ * tersendat. Diputar tanpa volume, jadi tidak terdengar siapa pun.
+ */
+watch(() => state.value?.settings?.voiceChimeUrl, (url) => {
+  if (url && audioUnlocked.value) void callSound.unlock(url)
+})
 
 /** Tombol buka-suara tidak ada gunanya bila suara memang dimatikan admin. */
 const voiceEnabled = computed(() => state.value?.settings?.voiceEnabled !== false)

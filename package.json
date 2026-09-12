@@ -68,6 +68,7 @@
     "smoke:phase6": "node scripts/smoke-phase6.mjs",
     "smoke:phase7": "node scripts/smoke-phase7.mjs",
     "smoke:phase8": "node scripts/smoke-phase8.mjs",
+    "smoke:voice": "node scripts/smoke-voice.mjs",
     "load-test": "node scripts/load-test.mjs",
     "ux-audit": "node scripts/ux-audit.mjs"
   }

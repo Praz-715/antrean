@@ -10,7 +10,7 @@ useHead({ title: 'Media Library' })
 interface MediaItem {
   id: string
   name: string
-  type: 'IMAGE' | 'VIDEO'
+  type: 'IMAGE' | 'VIDEO' | 'AUDIO'
   mime: string
   url: string
   sizeBytes: number
@@ -73,17 +73,27 @@ const uploadProgress = ref('')
 const dragOver = ref(false)
 
 /** Durasi video hanya bisa dibaca di browser; server memakainya untuk lama tayang playlist. */
-function readVideoDuration(file: File): Promise<number | undefined> {
+/**
+ * Durasi dibaca di peramban, bukan di server.
+ *
+ * Membacanya di server berarti memasang ffprobe hanya demi satu angka; elemen
+ * `<video>`/`<audio>` sudah tahu durasinya begitu metadata termuat. Nilainya tetap
+ * divalidasi ulang di server sebelum disimpan.
+ */
+function readMediaDuration(file: File): Promise<number | undefined> {
   return new Promise((resolve) => {
-    if (!file.type.startsWith('video/')) return resolve(undefined)
-    const video = document.createElement('video')
-    video.preload = 'metadata'
-    video.onloadedmetadata = () => {
-      URL.revokeObjectURL(video.src)
-      resolve(Number.isFinite(video.duration) ? Math.round(video.duration) : undefined)
+    const isVideo = file.type.startsWith('video/')
+    const isAudio = file.type.startsWith('audio/')
+    if (!isVideo && !isAudio) return resolve(undefined)
+
+    const el = document.createElement(isVideo ? 'video' : 'audio')
+    el.preload = 'metadata'
+    el.onloadedmetadata = () => {
+      URL.revokeObjectURL(el.src)
+      resolve(Number.isFinite(el.duration) ? Math.round(el.duration) : undefined)
     }
-    video.onerror = () => resolve(undefined)
-    video.src = URL.createObjectURL(file)
+    el.onerror = () => resolve(undefined)
+    el.src = URL.createObjectURL(file)
   })
 }
 
@@ -100,7 +110,7 @@ async function uploadFiles(files: FileList | File[]) {
     const form = new FormData()
     form.append('file', file)
     form.append('name', file.name.replace(/\.[^.]+$/, ''))
-    const duration = await readVideoDuration(file)
+    const duration = await readMediaDuration(file)
     if (duration) form.append('durationSeconds', String(duration))
 
     try {
@@ -229,7 +239,7 @@ const draftTotal = computed(() => draftItems.value.reduce((sum, i) => sum + Numb
     <UiPageHeading
       title="Media Library"
       icon="i-lucide-image"
-      description="Gambar dan video untuk layar antrean. Format didukung: JPG, PNG, WEBP, MP4."
+      description="Gambar, video, dan audio untuk layar antrean. Format didukung: JPG, PNG, WEBP, MP4, MP3, WAV, OGG, M4A."
     >
       <template #actions>
         <UButton
@@ -242,7 +252,7 @@ const draftTotal = computed(() => draftItems.value.reduce((sum, i) => sum + Numb
         <input
           ref="fileInput"
           type="file"
-          accept="image/jpeg,image/png,image/webp,video/mp4"
+          accept="image/jpeg,image/png,image/webp,video/mp4,audio/mpeg,audio/wav,audio/ogg,audio/mp4"
           multiple
           class="hidden"
           @change="onPick"
@@ -272,7 +282,12 @@ const draftTotal = computed(() => draftItems.value.reduce((sum, i) => sum + Numb
         <UInput v-model="search" icon="i-lucide-search" placeholder="Cari media…" class="w-56" />
         <USelect
           v-model="typeFilter"
-          :items="[{ label: 'Semua tipe', value: SELECT_ALL }, { label: 'Gambar', value: 'IMAGE' }, { label: 'Video', value: 'VIDEO' }]"
+          :items="[
+            { label: 'Semua tipe', value: SELECT_ALL },
+            { label: 'Gambar', value: 'IMAGE' },
+            { label: 'Video', value: 'VIDEO' },
+            { label: 'Audio', value: 'AUDIO' },
+          ]"
           class="w-40"
         />
       </div>
@@ -305,7 +320,7 @@ const draftTotal = computed(() => draftItems.value.reduce((sum, i) => sum + Numb
           Belum ada media
         </p>
         <p class="mx-auto mt-1 max-w-md text-sm text-slate-500">
-          Unggah logo instansi, gambar informasi, atau video untuk ditampilkan di layar antrean.
+          Unggah logo instansi, gambar informasi, video, atau berkas audio (nada panggil) untuk layar antrean.
         </p>
       </div>
 
@@ -318,10 +333,13 @@ const draftTotal = computed(() => draftItems.value.reduce((sum, i) => sum + Numb
           <button type="button" class="relative block aspect-video w-full bg-slate-100 dark:bg-slate-800" @click="previewTarget = item">
             <img v-if="item.type === 'IMAGE'" :src="item.url" :alt="item.name" class="size-full object-cover" loading="lazy">
             <div v-else class="flex size-full items-center justify-center">
-              <UIcon name="i-lucide-play-circle" class="size-10 text-slate-400" />
+              <UIcon
+                :name="item.type === 'AUDIO' ? 'i-lucide-music' : 'i-lucide-play-circle'"
+                class="size-10 text-slate-400"
+              />
             </div>
             <span class="absolute left-2 top-2 rounded bg-slate-900/70 px-1.5 py-0.5 text-[10px] font-medium text-white">
-              {{ item.type === 'VIDEO' ? 'VIDEO' : 'GAMBAR' }}
+              {{ item.type === 'VIDEO' ? 'VIDEO' : item.type === 'AUDIO' ? 'AUDIO' : 'GAMBAR' }}
             </span>
           </button>
 
@@ -495,6 +513,11 @@ const draftTotal = computed(() => draftItems.value.reduce((sum, i) => sum + Numb
     >
       <template #body>
         <img v-if="previewTarget?.type === 'IMAGE'" :src="previewTarget.url" :alt="previewTarget.name" class="w-full rounded-lg">
+        <!-- Audio tidak di-autoplay: yang membuka pratinjau belum tentu ingin bunyi -->
+        <div v-else-if="previewTarget?.type === 'AUDIO'" class="rounded-lg bg-slate-100 p-6 dark:bg-slate-800">
+          <UIcon name="i-lucide-music" class="mx-auto size-10 text-slate-400" />
+          <audio :src="previewTarget.url" class="mt-4 w-full" controls preload="metadata" />
+        </div>
         <video v-else-if="previewTarget" :src="previewTarget.url" class="w-full rounded-lg" controls autoplay muted />
         <p class="mt-3 text-xs text-slate-500">
           {{ previewTarget?.mime }} · {{ previewTarget ? fileSize(previewTarget.sizeBytes) : '' }}

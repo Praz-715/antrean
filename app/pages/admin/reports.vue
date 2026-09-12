@@ -78,7 +78,19 @@ watch(() => current.value?.timezone, () => {
 async function loadJobs() {
   jobs.value = await apiFetch<ExportJob[]>('/api/admin/exports')
 }
-await loadJobs()
+
+/**
+ * Muat pertama lewat `useAsyncData`, bukan `await loadJobs()`.
+ *
+ * Setup berjalan dua kali — sekali di server, sekali saat hidrasi — sehingga daftar
+ * yang isinya berubah cepat (pekerjaan ekspor berpindah status tiap beberapa detik)
+ * bisa berbeda antara HTML kiriman server dan hasil ambilan klien. Vue melaporkannya
+ * sebagai hydration mismatch lalu membuang DOM yang sudah dirender. Dengan
+ * `useAsyncData`, hasil render server ikut terkirim sebagai payload dan dipakai ulang.
+ */
+const { data: pekerjaanAwal } = await useAsyncData('admin-export-jobs', () =>
+  apiFetch<ExportJob[]>('/api/admin/exports'))
+jobs.value = pekerjaanAwal.value ?? []
 
 /** Pekerjaan diproses di latar belakang, jadi daftarnya dipantau selama masih berjalan. */
 let pollTimer: ReturnType<typeof setInterval> | undefined

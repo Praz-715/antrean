@@ -6,7 +6,7 @@
  * supaya tidak perlu memasang pustaka pengolah gambar hanya demi lebar × tinggi.
  */
 
-export type DetectedKind = 'IMAGE' | 'VIDEO'
+export type DetectedKind = 'IMAGE' | 'VIDEO' | 'AUDIO'
 
 export interface DetectedFile {
   kind: DetectedKind
@@ -45,13 +45,40 @@ export function detectFileType(buf: Buffer): DetectedFile | null {
     return { kind: 'IMAGE', mime: 'image/webp', extension: 'webp', ...webpSize(buf) }
   }
 
-  // MP4 / M4V: kotak 'ftyp' pada offset 4
+  // MP4 / M4V / M4A: kotak 'ftyp' pada offset 4
   if (buf.toString('ascii', 4, 8) === 'ftyp') {
     const brand = buf.toString('ascii', 8, 12)
+
+    // M4A memakai wadah yang sama dengan MP4, dibedakan oleh brand-nya.
+    if (brand.startsWith('M4A')) {
+      return { kind: 'AUDIO', mime: 'audio/mp4', extension: 'm4a' }
+    }
+
     const supported = ['isom', 'iso2', 'mp41', 'mp42', 'avc1', 'M4V ', 'dash']
     if (supported.some(b => brand.startsWith(b.trim()))) {
       return { kind: 'VIDEO', mime: 'video/mp4', extension: 'mp4' }
     }
+  }
+
+  /**
+   * MP3 dikenali dua cara: berkas hasil tagging diawali 'ID3', sedangkan berkas
+   * mentah langsung dimulai dengan frame sync (11 bit menyala: FF Ex/Fx).
+   */
+  if (buf.toString('ascii', 0, 3) === 'ID3') {
+    return { kind: 'AUDIO', mime: 'audio/mpeg', extension: 'mp3' }
+  }
+  if (buf[0] === 0xFF && (buf[1]! & 0xE0) === 0xE0) {
+    return { kind: 'AUDIO', mime: 'audio/mpeg', extension: 'mp3' }
+  }
+
+  // WAV: 'RIFF' .... 'WAVE'
+  if (buf.toString('ascii', 0, 4) === 'RIFF' && buf.toString('ascii', 8, 12) === 'WAVE') {
+    return { kind: 'AUDIO', mime: 'audio/wav', extension: 'wav' }
+  }
+
+  // OGG / Opus: 'OggS'
+  if (buf.toString('ascii', 0, 4) === 'OggS') {
+    return { kind: 'AUDIO', mime: 'audio/ogg', extension: 'ogg' }
   }
 
   return null

@@ -113,6 +113,7 @@ Halaman publik contoh: `http://localhost:3000/p/demo2026`
 | `npm run smoke:phase6` | Uji analytics, laporan, ekspor, dan audit log |
 | `npm run smoke:phase7` | Uji pengaturan, rating, integrasi data source, dan autofill |
 | `npm run smoke:phase8` | Uji penjadwal otomatis, header keamanan, rate limit, unggahan |
+| `npm run smoke:voice` | Uji suara panggilan di layar **memakai data nyata** (event, halaman publik, akun operator): nada dari Media Library, nada bawaan sistem, dan mode "hanya nada" — menambah 3 nomor ke papan hari ini |
 | `npm run load-test` | Uji beban ringan: 2.000 antrean + 200 display |
 | `npm run ux-audit` | Audit Function/UI/UX lewat peramban: responsif, kontras, aksesibilitas, umpan balik |
 | `npm run typecheck` | Pemeriksaan tipe |
@@ -184,7 +185,7 @@ Tidak ada query Prisma di dalam handler, tidak ada business logic di dalam `.vue
 | `/admin/operators`, `/admin/assignments` | Pengguna & penugasan |
 | `/admin/public-pages`, `/admin/forms` | Publikasi & form builder |
 | `/admin/displays`, `/admin/announcements` | Perangkat display & teks berjalan |
-| `/admin/media`, `/admin/display-builder` | Media library, playlist & penyusun tata letak layar (termasuk widget **Nomor per Loket** & **Data Pengunjung**) |
+| `/admin/media`, `/admin/display-builder` | Media library (gambar, video, **audio**), playlist & penyusun tata letak layar (termasuk widget **Nomor per Loket** & **Data Pengunjung**) |
 | `/admin/analytics`, `/admin/reports`, `/admin/audit-logs` | Grafik, laporan harian, pusat ekspor & jejak audit |
 | `/admin/visitors`, `/admin/feedback` | Data pengunjung & moderasi rating/testimoni |
 | `/admin/integrations`, `/admin/settings`, `/admin/roles` | Sumber data eksternal, pengaturan sistem, role & izin |
@@ -242,6 +243,12 @@ tampilannya berubah terang hanya bila pengguna memang memilih tema terang.
 - **Penjadwal.** Status event diselaraskan dengan jadwalnya tiap menit
   (`server/plugins/scheduler.ts`). Berjalan di dalam proses, jadi bila nanti dijalankan lebih dari
   satu instance, nyalakan hanya pada salah satunya (`SCHEDULER_ENABLED=false` pada sisanya).
+- **Pengunjung yang kembali tidak disuruh mendaftar ulang.** Token antrean yang sudah
+  diambil diingat di peramban pengunjung (per halaman publik), lalu diperiksa ulang ke
+  server saat halaman dibuka: yang sudah selesai, dibatalkan, atau milik hari lain
+  dilupakan diam-diam. Membuka layanan yang nomornya sudah dimiliki menampilkan nomor
+  itu — bukan formulir kosong — dengan "Registrasi Kembali" sebagai pilihan kedua.
+
 - **Operator → loket, loket → layanan (§12, §28).** Operator didudukkan di satu loket; loket itulah
   yang menentukan layanan yang ia tangani, dan karena loket milik satu event, "satu operator satu
   event" terjaga oleh struktur. Penempatan baru ditolak bila operatornya sudah duduk di loket

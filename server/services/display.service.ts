@@ -3,6 +3,7 @@ import { errors } from '../utils/response'
 import { ERROR_CODES } from '../../shared/constants/errors'
 import { newId, newShortCode } from '../utils/id'
 import { storage } from '../utils/storage'
+import { systemToneUrl } from '../../shared/constants/tones'
 import { hashToken, randomToken } from '../utils/crypto'
 import { queueService } from './queue.service'
 import { eventService } from './event.service'
@@ -170,11 +171,21 @@ export const displayService = {
       branding: device.event.branding,
       serviceDate: board.serviceDate,
       openState,
-      // Layar tidak menyimpan preferensinya sendiri: perilaku suara datang dari
-      // pengaturan sistem supaya satu perubahan berlaku ke seluruh perangkat (§49).
+      /**
+       * Layar tidak menyimpan preferensinya sendiri: perilaku suara datang dari
+       * pengaturan sistem, yang boleh ditimpa per event (§49). Nada panggil dikirim
+       * sebagai URL siap pakai — layar tidak perlu tahu soal id media, dan id yang
+       * berkasnya sudah dihapus otomatis jatuh ke `null` di sini, bukan jadi
+       * permintaan 404 di perangkat.
+       */
       settings: {
         voiceEnabled: Boolean(settings[SETTING_KEYS.DISPLAY_VOICE_ENABLED]),
         voiceLanguage: String(settings[SETTING_KEYS.DISPLAY_VOICE_LANGUAGE]),
+        voiceProvider: String(settings[SETTING_KEYS.DISPLAY_VOICE_PROVIDER] ?? 'browser'),
+        voiceChimeUrl: await resolveChimeUrl(
+          device.event.organizationId,
+          String(settings[SETTING_KEYS.DISPLAY_VOICE_CHIME_MEDIA_ID] ?? ''),
+        ),
       },
       board: filtered,
       counters,
@@ -299,4 +310,24 @@ export const displayService = {
       data: { deviceTokenHash: null, status: 'UNPAIRED' },
     })
   },
+}
+
+/**
+ * URL berkas nada panggil, bila memang masih ada dan memang audio.
+ *
+ * Diperiksa ulang di sini karena berkasnya bisa dihapus jauh setelah dipilih;
+ * lebih baik layar tidak berbunyi daripada mencoba memutar berkas yang sudah tiada.
+ */
+async function resolveChimeUrl(organizationId: string, mediaId: string) {
+  if (!mediaId) return null
+
+  // Nada bawaan ikut di dalam aplikasi, jadi tidak perlu menyentuh database sama sekali.
+  const bawaan = systemToneUrl(mediaId)
+  if (bawaan) return bawaan
+
+  const media = await prisma.media.findFirst({
+    where: { id: mediaId, organizationId, type: 'AUDIO', deletedAt: null },
+    select: { filePath: true },
+  })
+  return media ? storage.publicUrl(media.filePath) : null
 }

@@ -110,6 +110,7 @@ enum WidgetType {
 enum MediaType {
   IMAGE
   VIDEO
+  AUDIO
 }
 
 enum AnnouncementType {

@@ -31,6 +31,33 @@ export function spellQueueNumber(queueNumber: string): string {
     .trim()
 }
 
+export interface AnnouncementParams {
+  queueNumber: string
+  queueTypeName?: string | null
+  counterName?: string | null
+  priority?: boolean
+}
+
+/**
+ * Kalimat panggilan, dipisah dari mesin suaranya.
+ *
+ * Suara peramban dan TTS eksternal harus mengucapkan kalimat yang sama persis —
+ * kalau tiap jalur merangkai kalimatnya sendiri, keduanya pelan-pelan berbeda dan
+ * tidak ada yang menyadarinya sampai ada yang mendengarkan keduanya berdampingan.
+ */
+export function announcementText(params: AnnouncementParams): string {
+  // Kata "prioritas" diletakkan di depan supaya terdengar sebelum nomornya —
+  // pengunjung lain jadi paham kenapa nomor itu dipanggil lebih dulu.
+  const parts = [
+    params.priority
+      ? `Antrean prioritas, nomor ${spellQueueNumber(params.queueNumber)}`
+      : `Nomor antrean, ${spellQueueNumber(params.queueNumber)}`,
+  ]
+  if (params.counterName) parts.push(`silakan menuju ${params.counterName}`)
+  else if (params.queueTypeName) parts.push(`silakan menuju ${params.queueTypeName}`)
+  return parts.join(', ') + '.'
+}
+
 export function useSpeech(initial: Partial<SpeechSettings> = {}) {
   const settings = reactive<SpeechSettings>({ ...DEFAULT_SPEECH, ...initial })
   const supported = ref(false)
@@ -96,22 +123,8 @@ export function useSpeech(initial: Partial<SpeechSettings> = {}) {
   }
 
   /** "Nomor antrean A 0 2 3, silakan menuju Loket 1." */
-  function announceQueue(params: {
-    queueNumber: string
-    queueTypeName?: string | null
-    counterName?: string | null
-    priority?: boolean
-  }) {
-    // Kata "prioritas" diletakkan di depan supaya terdengar sebelum nomornya —
-    // pengunjung lain jadi paham kenapa nomor itu dipanggil lebih dulu.
-    const parts = [
-      params.priority
-        ? `Antrean prioritas, nomor ${spellQueueNumber(params.queueNumber)}`
-        : `Nomor antrean, ${spellQueueNumber(params.queueNumber)}`,
-    ]
-    if (params.counterName) parts.push(`silakan menuju ${params.counterName}`)
-    else if (params.queueTypeName) parts.push(`silakan menuju ${params.queueTypeName}`)
-    speak(parts.join(', ') + '.')
+  function announceQueue(params: AnnouncementParams) {
+    speak(announcementText(params))
   }
 
   function cancel() {

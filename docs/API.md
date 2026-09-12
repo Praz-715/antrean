@@ -407,11 +407,39 @@ pengunjung tidak ikut hilang. Hanya satu formulir aktif per event.
 | `DELETE /api/admin/displays/{id}` | `display.manage` |
 | `POST /api/admin/displays/{id}/reset-pairing` | `display.manage` |
 | `GET /api/display/{deviceCode}/state` | publik (dipakai layar) |
+| `GET /api/display/{deviceCode}/tts?text=` | publik (dipakai layar) |
 | `POST /api/display/{deviceCode}/pair` | publik, sekali per perangkat |
 
 `GET /state` mengembalikan papan antrean, pengumuman aktif, template yang terpasang (bila ada),
 serta peta `mediaById` dan `playlistById` berisi URL berkas yang dirujuk widget — sehingga layar
 tidak perlu memanggil endpoint tambahan.
+
+`settings` pada respons `/state` membawa perilaku suara yang sudah digabung dari
+pengaturan sistem + penimpa event: `voiceEnabled`, `voiceLanguage`, `voiceProvider`
+(`browser` | `external` | `chime`), dan `voiceChimeUrl` — URL berkas nada panggil yang siap
+diputar, atau `null` bila tidak diatur (atau berkasnya sudah dihapus).
+
+**Nada panggil punya dua sumber.** Nilai `display.voiceChimeMediaId` boleh berupa
+`system:toneN` — nada bawaan yang ikut di dalam aplikasi (`public/tone/`, sembilan
+pilihan, lihat `shared/constants/tones.ts`) — atau id berkas Media Library. Nada bawaan
+tidak menyentuh database sama sekali dan tidak bisa terhapus dari halaman Media, jadi
+instalasi baru langsung punya bunyi tanpa harus mengunggah apa pun.
+
+**Tiga mode suara.** `browser` membacakan nomor dengan suara peramban, `external`
+memakai TTS eksternal lewat proxy, dan `chime` TIDAK membacakan nomor sama sekali —
+cukup berkas audio dari Media Library. Nada panggil (`voiceChimeUrl`) dibunyikan lebih
+dulu pada ketiga mode. Bila mode `chime` dipilih tetapi nadanya belum diatur, layar
+jatuh ke suara peramban: panggilan yang tidak berbunyi sama sekali lebih merugikan
+daripada suara bawaan.
+
+**TTS eksternal lewat proxy.** Bila `voiceProvider = external`, layar TIDAK memanggil
+layanan TTS langsung melainkan `GET /api/display/{deviceCode}/tts?text=…`. Server yang
+memanggil layanan aslinya memakai templat URL dari pengaturan (`{text}` dan `{lang}`),
+dengan penjaga SSRF yang sama seperti sumber data, batas waktu 8 detik, batas 2 MB, dan
+penolakan jawaban yang bukan `audio/*`. Alasannya: templat URL sering memuat kunci API —
+kalau dipanggil dari peramban, kuncinya terbaca siapa pun yang membuka layar — dan CSP
+aplikasi ini hanya mengizinkan koneksi ke origin sendiri. Bila TTS eksternal gagal, layar
+jatuh ke suara peramban, bukan diam.
 
 Selain `board` (per JENIS ANTREAN), respons juga membawa `counters` (per LOKET) untuk widget
 "Nomor per Loket" — satu layanan sering dilayani 2–4 loket sekaligus:
@@ -449,7 +477,7 @@ langsung ikut berubah tanpa reload.
 
 | Endpoint | Permission |
 |---|---|
-| `GET /api/admin/media` | `media.view` — filter `type` (IMAGE/VIDEO) & `search` |
+| `GET /api/admin/media` | `media.view` — filter `type` (IMAGE/VIDEO/AUDIO) & `search` |
 | `POST /api/admin/media` | `media.manage` — `multipart/form-data` |
 | `PATCH /api/admin/media/{id}` | `media.manage` — ubah nama |
 | `DELETE /api/admin/media/{id}` | `media.manage` |
@@ -681,6 +709,18 @@ Ekspor testimoni memakai pusat ekspor dengan `type: "TESTIMONIALS"`.
 | `GET /api/admin/settings` | `setting.view` |
 | `PUT /api/admin/settings` | `setting.manage` |
 | `POST /api/admin/settings/reset` | `setting.manage` |
+| `GET /api/admin/organization` | `setting.view` / `setting.manage` |
+| `PATCH /api/admin/organization` | `setting.manage` |
+
+**Nama organisasi bukan pengaturan sistem.** Ia tetap tinggal di kolom
+`organizations.name` karena di situlah seluruh antarmuka sudah membacanya — header
+panel admin, halaman antrean pengunjung, layar display, tiket cetak, dan kop laporan.
+Menyalinnya ke tabel pengaturan hanya akan melahirkan dua sumber kebenaran. Karena itu
+halaman Pengaturan menyuntingnya lewat endpoint terpisah (`PATCH /api/admin/organization`,
+badan: `{ "name": "…" }`), walau tombol simpannya sama dengan pengaturan lain.
+
+Slug organisasi TIDAK ikut berubah, jadi tautan publik dan QR yang sudah dicetak tetap
+berlaku. Perubahannya tercatat di audit log sebagai `ORGANIZATION_UPDATED`.
 
 Katalognya ada di `shared/constants/settings.ts` dan dipakai bersama server & antarmuka.
 Kunci di luar katalog diabaikan; angka dijepit ke rentangnya.

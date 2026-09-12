@@ -6,7 +6,7 @@ import { mediaService } from '../../../services/media.service'
 import { PERMISSIONS } from '../../../../shared/constants/permissions'
 
 const querySchema = z.object({
-  type: z.enum(['IMAGE', 'VIDEO']).optional(),
+  type: z.enum(['IMAGE', 'VIDEO', 'AUDIO']).optional(),
   search: z.string().trim().max(120).optional(),
 })
 

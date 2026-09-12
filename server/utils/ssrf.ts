@@ -230,6 +230,66 @@ export async function safeFetch(rawUrl: string, options: SafeFetchOptions = {}):
   }
 }
 
+/**
+ * Versi biner dari `safeFetch`, untuk respons yang bukan teks (mis. audio TTS).
+ *
+ * Penjagaannya sama persis — URL divalidasi, alamat privat ditolak, redirect tidak
+ * diikuti, ada batas waktu dan batas ukuran — hanya isinya yang dikembalikan sebagai
+ * byte, bukan string. Dipisah supaya `safeFetch` tetap sederhana untuk pemakaian
+ * JSON yang jauh lebih sering.
+ */
+export async function safeFetchBinary(rawUrl: string, options: SafeFetchOptions = {}): Promise<{
+  status: number
+  ok: boolean
+  contentType: string
+  bytes: Uint8Array
+  durationMs: number
+}> {
+  const { url } = await assertSafeUrl(rawUrl)
+  const timeoutMs = Math.min(30_000, Math.max(500, options.timeoutMs ?? 5000))
+  const maxBytes = options.maxBytes ?? DEFAULT_MAX_BYTES
+  const startedAt = Date.now()
+
+  let response: Response
+  try {
+    response = await fetch(url, {
+      method: options.method ?? 'GET',
+      headers: options.headers,
+      redirect: 'manual',
+      signal: AbortSignal.timeout(timeoutMs),
+    })
+  }
+  catch (error) {
+    const message = (error as Error).name === 'TimeoutError'
+      ? `Tidak ada jawaban dalam ${timeoutMs} ms`
+      : (error as Error).message
+    throw errors.badRequest(ERROR_CODES.DATA_SOURCE_UNREACHABLE, `Gagal menghubungi layanan: ${message}`)
+  }
+
+  if (response.status >= 300 && response.status < 400) {
+    throw errors.badRequest(
+      ERROR_CODES.DATA_SOURCE_UNREACHABLE,
+      'Layanan membalas dengan redirect; arahkan langsung ke URL tujuan',
+    )
+  }
+
+  const buffer = await response.arrayBuffer()
+  if (buffer.byteLength > maxBytes) {
+    throw errors.badRequest(
+      ERROR_CODES.DATA_SOURCE_UNREACHABLE,
+      `Jawaban lebih besar dari batas ${Math.round(maxBytes / 1024)} KB`,
+    )
+  }
+
+  return {
+    status: response.status,
+    ok: response.ok,
+    contentType: response.headers.get('content-type') ?? '',
+    bytes: new Uint8Array(buffer),
+    durationMs: Date.now() - startedAt,
+  }
+}
+
 /** Baca body secukupnya saja — jangan sampai satu respons raksasa menghabiskan memori. */
 async function readCapped(response: Response, maxBytes: number) {
   if (!response.body) return { text: '', truncated: false }

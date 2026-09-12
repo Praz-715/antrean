@@ -2,6 +2,7 @@
 import { apiFetch } from '../../../composables/useApi'
 import { EVENT_STATUS_COLOR, EVENT_STATUS_LABEL } from '#shared/utils/queue-format'
 import { PERMISSIONS } from '#shared/constants/permissions'
+import { SYSTEM_TONES, systemToneUrl } from '#shared/constants/tones'
 
 definePageMeta({ layout: 'admin', middleware: 'admin' })
 
@@ -38,6 +39,9 @@ interface EventOverrides {
   ratingEnabled?: boolean
   voiceEnabled?: boolean
   voiceLanguage?: string
+  /** Id berkas audio nada panggil; string kosong = sengaja tanpa nada. */
+  voiceChimeMediaId?: string
+  voiceProvider?: string
   estimateEnabled?: boolean
 }
 
@@ -61,10 +65,27 @@ interface EventDetail {
 const detail = ref<EventDetail | null>(null)
 const pending = ref(true)
 
+/**
+ * Berkas Media Library dipakai dua tempat pada halaman ini: logo & latar layar
+ * (gambar) dan nada panggil (audio). Diambil sekali, disaring per kebutuhan.
+ */
+const mediaFiles = ref<Array<{ id: string, name: string, url: string, type: string }>>([])
+const SELECT_KOSONG = '__none__'
+const SELECT_IKUT = '__inherit__'
+
 async function load() {
   pending.value = true
   try {
-    detail.value = await apiFetch<EventDetail>(`/api/admin/events/${eventId}`)
+    /**
+     * Keduanya dimulai bersamaan: `apiFetch` setelah `await` di dalam setup
+     * kehilangan konteks Nuxt dan menjatuhkan render server.
+     */
+    const [event, media] = await Promise.all([
+      apiFetch<EventDetail>(`/api/admin/events/${eventId}`),
+      apiFetch<typeof mediaFiles.value>('/api/admin/media').catch(() => []),
+    ])
+    detail.value = event
+    mediaFiles.value = media ?? []
     Object.assign(form, {
       name: detail.value.name,
       description: detail.value.description ?? '',
@@ -85,6 +106,8 @@ async function load() {
       maxWaitingPerType: stored.maxWaitingPerType ?? null,
       ratingEnabled: stored.ratingEnabled ?? null,
       voiceEnabled: stored.voiceEnabled ?? null,
+      voiceChimeMediaId: stored.voiceChimeMediaId ?? null,
+      voiceProvider: stored.voiceProvider ?? null,
     })
     schedules.value = DAYS.map((_, day) => {
       const found = detail.value!.schedules.find(s => s.dayOfWeek === day && !s.overrideDate)
@@ -126,7 +149,58 @@ const overrides = reactive<{
   maxWaitingPerType: number | null
   ratingEnabled: boolean | null
   voiceEnabled: boolean | null
-}>({ recallLimit: null, maxWaitingPerType: null, ratingEnabled: null, voiceEnabled: null })
+  /** Id berkas audio; string kosong berarti "tanpa nada", null berarti ikut sistem. */
+  voiceChimeMediaId: string | null
+  /** 'browser' | 'external' | 'chime'; null berarti ikut sistem. */
+  voiceProvider: string | null
+}>({ recallLimit: null, maxWaitingPerType: null, ratingEnabled: null, voiceEnabled: null, voiceChimeMediaId: null, voiceProvider: null })
+
+/** Pilihan berkas untuk kolom gambar/audio, plus opsi kosong. */
+function mediaOptions(type: 'IMAGE' | 'AUDIO', current?: string) {
+  const options = [
+    { label: type === 'AUDIO' ? '— tanpa nada —' : '— tanpa gambar —', value: SELECT_KOSONG },
+    ...mediaFiles.value.filter(m => m.type === type).map(m => ({ label: m.name, value: m.url })),
+  ]
+  // URL lama di luar Media Library tetap ditawarkan supaya tidak terhapus diam-diam.
+  if (current && !options.some(o => o.value === current)) {
+    options.push({ label: `${current} (di luar Media Library)`, value: current })
+  }
+  return options
+}
+
+/**
+ * Nada panggil disimpan sebagai nilai, bukan URL — sama seperti di pengaturan sistem:
+ * `system:toneN` untuk nada bawaan, atau id berkas Media Library.
+ */
+const chimeOptions = computed(() => [
+  { label: 'Ikuti pengaturan sistem', value: SELECT_IKUT },
+  { label: 'Tanpa nada panggil', value: SELECT_KOSONG },
+  ...SYSTEM_TONES.map(t => ({ label: t.label, value: t.value })),
+  ...mediaFiles.value.filter(m => m.type === 'AUDIO').map(m => ({ label: m.name, value: m.id })),
+])
+
+const chimeValue = computed({
+  get: () => overrides.voiceChimeMediaId === null
+    ? SELECT_IKUT
+    : (overrides.voiceChimeMediaId || SELECT_KOSONG),
+  set: (v: string) => {
+    overrides.voiceChimeMediaId = v === SELECT_IKUT ? null : v === SELECT_KOSONG ? '' : v
+  },
+})
+
+const chimePreviewUrl = computed(() =>
+  systemToneUrl(overrides.voiceChimeMediaId)
+  ?? mediaFiles.value.find(m => m.id === overrides.voiceChimeMediaId)?.url
+  ?? null)
+
+function brandingProxy(field: 'logoUrl' | 'backgroundUrl') {
+  return computed({
+    get: () => branding[field] || SELECT_KOSONG,
+    set: (v: string) => { branding[field] = v === SELECT_KOSONG ? '' : v },
+  })
+}
+const logoValue = brandingProxy('logoUrl')
+const backgroundValue = brandingProxy('backgroundUrl')
 const schedules = ref<Array<{ dayOfWeek: number, openTime: string, closeTime: string, isClosed: boolean }>>([])
 
 const timezones = [
@@ -177,6 +251,11 @@ async function saveBranding() {
           ...(branding.fontFamily.trim() ? { fontFamily: branding.fontFamily.trim() } : {}),
           ...(branding.footerText.trim() ? { footerText: branding.footerText.trim() } : {}),
         },
+        /**
+         * `null` = ikut pengaturan sistem, jadi kuncinya memang tidak dikirim.
+         * String kosong TETAP dikirim — itulah cara menyatakan "tanpa nada panggil"
+         * pada event yang sistemnya justru punya nada.
+         */
         settings: Object.fromEntries(
           Object.entries(overrides).filter(([, value]) => value !== null && value !== undefined),
         ),
@@ -482,12 +561,46 @@ function copyAll(fromDay: number) {
             </UFormField>
           </div>
 
-          <UFormField label="URL logo" hint="opsional">
-            <UInput v-model="branding.logoUrl" class="w-full" placeholder="/media/logo.png" :disabled="!can(PERMISSIONS.EVENT_MANAGE)" />
+          <UFormField label="Logo" hint="opsional">
+            <div class="flex items-center gap-2">
+              <USelectMenu
+                v-if="mediaFiles.some(m => m.type === 'IMAGE')"
+                v-model="logoValue"
+                :items="mediaOptions('IMAGE', branding.logoUrl)"
+                value-key="value"
+                :search-input="{ placeholder: 'Cari berkas…' }"
+                class="w-full"
+                :disabled="!can(PERMISSIONS.EVENT_MANAGE)"
+              />
+              <UInput v-else v-model="branding.logoUrl" class="w-full" placeholder="/media/logo.png" :disabled="!can(PERMISSIONS.EVENT_MANAGE)" />
+              <img
+                v-if="branding.logoUrl"
+                :src="branding.logoUrl"
+                alt=""
+                class="size-9 shrink-0 rounded border border-slate-200 object-contain dark:border-slate-800"
+              >
+            </div>
           </UFormField>
 
-          <UFormField label="URL latar layar" hint="opsional">
-            <UInput v-model="branding.backgroundUrl" class="w-full" placeholder="/media/latar.jpg" :disabled="!can(PERMISSIONS.EVENT_MANAGE)" />
+          <UFormField label="Latar layar" hint="opsional">
+            <div class="flex items-center gap-2">
+              <USelectMenu
+                v-if="mediaFiles.some(m => m.type === 'IMAGE')"
+                v-model="backgroundValue"
+                :items="mediaOptions('IMAGE', branding.backgroundUrl)"
+                value-key="value"
+                :search-input="{ placeholder: 'Cari berkas…' }"
+                class="w-full"
+                :disabled="!can(PERMISSIONS.EVENT_MANAGE)"
+              />
+              <UInput v-else v-model="branding.backgroundUrl" class="w-full" placeholder="/media/latar.jpg" :disabled="!can(PERMISSIONS.EVENT_MANAGE)" />
+              <img
+                v-if="branding.backgroundUrl"
+                :src="branding.backgroundUrl"
+                alt=""
+                class="size-9 shrink-0 rounded border border-slate-200 object-cover dark:border-slate-800"
+              >
+            </div>
           </UFormField>
 
           <UFormField label="Font" hint="opsional" help="Nama keluarga font CSS, mis. Inter">
@@ -547,6 +660,46 @@ function copyAll(fromDay: number) {
               ]"
               @update:model-value="(v: string) => (overrides.voiceEnabled = v === 'inherit' ? null : v === 'true')"
             />
+          </UFormField>
+
+          <UFormField
+            label="Sumber suara"
+            help="&quot;Hanya nada panggil&quot; tidak membacakan nomornya — cukup bunyi dari Media Library."
+          >
+            <USelect
+              :model-value="overrides.voiceProvider ?? 'inherit'"
+              class="w-full"
+              :disabled="!can(PERMISSIONS.EVENT_MANAGE)"
+              :items="[
+                { label: 'Ikuti pengaturan sistem', value: 'inherit' },
+                { label: 'Suara peramban', value: 'browser' },
+                { label: 'TTS eksternal', value: 'external' },
+                { label: 'Hanya nada panggil', value: 'chime' },
+              ]"
+              @update:model-value="(v: string) => (overrides.voiceProvider = v === 'inherit' ? null : v)"
+            />
+          </UFormField>
+
+          <UFormField
+            label="Nada panggil"
+            help="Berkas audio dari Media Library yang dibunyikan sebelum nomor dibacakan di layar event ini."
+          >
+            <USelectMenu
+              v-model="chimeValue"
+              :items="chimeOptions"
+              value-key="value"
+              :search-input="{ placeholder: 'Cari berkas…' }"
+              class="w-full"
+              :disabled="!can(PERMISSIONS.EVENT_MANAGE)"
+            />
+            <audio v-if="chimePreviewUrl" :src="chimePreviewUrl" class="mt-2 w-full" controls preload="none" />
+            <NuxtLink
+              v-else-if="!mediaFiles.some(m => m.type === 'AUDIO')"
+              to="/admin/media"
+              class="mt-1 block text-xs text-slate-500 underline"
+            >
+              Unggah nada sendiri di Media Library
+            </NuxtLink>
           </UFormField>
         </div>
       </div>

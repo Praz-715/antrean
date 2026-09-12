@@ -89,8 +89,77 @@ const branding = computed(() => {
 
 const primary = computed(() => branding.value.primary)
 
+// ---- antrean yang sudah diambil dari perangkat ini ----
+interface TiketSaya {
+  token: string
+  queueNumber: string
+  status: string
+  serviceDate: string
+  queueTypeId: string
+  ahead: number
+  nowServing: string | null
+}
+
+const tickets = usePublicTickets(publishCode)
+/** Kunci: id jenis antrean. Hanya berisi antrean yang MASIH berlaku hari ini. */
+const myTickets = ref<Record<string, TiketSaya>>({})
+
+const STATUS_AKTIF = ['WAITING', 'CALLED', 'SERVING']
+
+/**
+ * Ingatan perangkat diperiksa ulang ke server, bukan dipercaya begitu saja.
+ *
+ * Tokennya bisa saja milik antrean kemarin, sudah selesai dilayani, atau dibatalkan
+ * petugas. Menampilkannya sebagai "antrean Anda" pada keadaan itu justru menyesatkan,
+ * jadi yang sudah tidak berlaku dilupakan diam-diam — pengunjung kembali melihat
+ * formulir seperti biasa.
+ *
+ * Dijalankan setelah komponen terpasang: localStorage tidak ada saat render server,
+ * dan menebaknya di sana hanya akan membuat hasil hidrasi berbeda.
+ */
+async function muatTiketSaya() {
+  const tersimpan = tickets.read()
+  const hasil: Record<string, TiketSaya> = {}
+
+  await Promise.all(Object.entries(tersimpan).map(async ([queueTypeId, token]) => {
+    try {
+      const tiket = await apiFetch<{
+        queueNumber: string
+        status: string
+        serviceDate: string
+        queueType: { id: string }
+        position: { ahead: number }
+        nowServing: { queueNumber: string } | null
+      }>(`/api/public/track/${token}`)
+
+      const masihBerlaku = STATUS_AKTIF.includes(tiket.status)
+        && tiket.serviceDate === data.value?.openState.serviceDate
+
+      if (!masihBerlaku) { tickets.forget(queueTypeId); return }
+
+      hasil[tiket.queueType.id] = {
+        token,
+        queueNumber: tiket.queueNumber,
+        status: tiket.status,
+        serviceDate: tiket.serviceDate,
+        queueTypeId: tiket.queueType.id,
+        ahead: tiket.position?.ahead ?? 0,
+        nowServing: tiket.nowServing?.queueNumber ?? null,
+      }
+    }
+    catch {
+      // Token tidak dikenal lagi (antrean dihapus) — buang saja dari ingatan.
+      tickets.forget(queueTypeId)
+    }
+  }))
+
+  myTickets.value = hasil
+}
+
+onMounted(() => { void muatTiketSaya() })
+
 // ---- alur ----
-const step = ref<'pick' | 'form'>('pick')
+const step = ref<'pick' | 'form' | 'ticket'>('pick')
 const selectedTypeId = ref<string | null>(null)
 const selectedType = computed(() => data.value?.queueTypes.find(t => t.id === selectedTypeId.value) ?? null)
 
@@ -120,12 +189,39 @@ watchEffect(() => {
 const visibleFields = computed(() =>
   (data.value?.form?.fields ?? []).filter(f => f.type !== 'HIDDEN'))
 
+const selectedTicket = computed(() =>
+  selectedTypeId.value ? myTickets.value[selectedTypeId.value] ?? null : null)
+
+/**
+ * Membuka layanan yang antreannya SUDAH dimiliki tidak langsung menyodorkan formulir.
+ *
+ * Pengunjung yang menekan "kembali" hanya ingin melihat-lihat; disuruh mengisi
+ * formulir lagi membuatnya mengira nomornya hilang — dan sebagian akan benar-benar
+ * mendaftar dua kali. Nomornya ditampilkan lebih dulu, dan mendaftar lagi jadi
+ * tindakan yang harus dipilih sendiri.
+ */
 function chooseType(id: string) {
   selectedTypeId.value = id
   submitError.value = ''
   fieldErrors.value = {}
+
+  if (myTickets.value[id]) { step.value = 'ticket'; return }
   if (visibleFields.value.length) step.value = 'form'
   else submit()
+}
+
+/** "Registrasi Kembali" — pengunjung memang ingin nomor kedua. */
+function daftarLagi() {
+  submitError.value = ''
+  fieldErrors.value = {}
+  if (visibleFields.value.length) step.value = 'form'
+  else submit()
+}
+
+function labelStatus(status: string) {
+  if (status === 'CALLED') return 'Sedang dipanggil'
+  if (status === 'SERVING') return 'Sedang dilayani'
+  return 'Menunggu dipanggil'
 }
 
 // ---- isi otomatis dari sistem eksternal (§6) ----
@@ -196,6 +292,8 @@ async function submit() {
       method: 'POST',
       body: { queueTypeId: selectedTypeId.value, values, captchaToken: captchaToken.value || undefined },
     })
+    // Diingat supaya kunjungan berikutnya menampilkan nomor ini, bukan formulir kosong.
+    tickets.remember(selectedTypeId.value, result.token)
     await navigateTo(`/queue/${result.token}`)
   }
   catch (e) {
@@ -357,7 +455,16 @@ function minutesLabel(seconds: number, count: number) {
                 <p class="truncate text-sm text-slate-500">
                   {{ type.description || `${type.waitingCount} orang menunggu` }}
                 </p>
-                <p class="mt-0.5 text-xs text-slate-400">
+                <!-- Sudah punya nomor di layanan ini: itu yang paling ingin ia lihat -->
+                <p
+                  v-if="myTickets[type.id]"
+                  class="mt-1 inline-flex items-center gap-1.5 rounded-full px-2 py-0.5 text-xs font-semibold"
+                  :style="{ backgroundColor: type.color + '1a', color: readable(type.color) }"
+                >
+                  <UIcon name="i-lucide-ticket" class="size-3.5" />
+                  Nomor Anda {{ myTickets[type.id]?.queueNumber }}
+                </p>
+                <p v-else class="mt-0.5 text-xs text-slate-400">
                   {{ minutesLabel(type.estServiceSeconds, type.waitingCount) }}
                 </p>
               </div>
@@ -374,6 +481,77 @@ function minutesLabel(seconds: number, count: number) {
             title="Pendaftaran sedang ditutup"
             :description="data.openState.message"
           />
+        </section>
+
+        <!-- Sudah punya nomor di layanan ini -->
+        <section v-else-if="step === 'ticket' && selectedType && selectedTicket">
+          <button
+            type="button"
+            class="mb-3 flex items-center gap-1 text-sm text-slate-500"
+            @click="step = 'pick'"
+          >
+            <UIcon name="i-lucide-chevron-left" class="size-4" />
+            Ganti layanan
+          </button>
+
+          <div class="rounded-2xl bg-white p-6 text-center shadow-sm dark:bg-slate-900">
+            <p class="text-sm text-slate-500">
+              Anda sudah punya nomor di {{ selectedType.name }}
+            </p>
+            <p class="queue-number mt-2 text-6xl" :style="{ color: readable(selectedType.color) }">
+              {{ selectedTicket.queueNumber }}
+            </p>
+            <p class="mt-2 text-sm font-medium">
+              {{ labelStatus(selectedTicket.status) }}
+            </p>
+
+            <div class="mt-4 grid grid-cols-2 gap-3 border-t border-slate-100 pt-4 text-center dark:border-slate-800">
+              <div>
+                <p class="text-xs uppercase tracking-wide text-slate-500">
+                  Antrean di depan
+                </p>
+                <p class="mt-0.5 text-xl font-bold">
+                  {{ selectedTicket.ahead }}
+                </p>
+              </div>
+              <div>
+                <p class="text-xs uppercase tracking-wide text-slate-500">
+                  Sedang dipanggil
+                </p>
+                <p class="mt-0.5 text-xl font-bold">
+                  {{ selectedTicket.nowServing ?? '—' }}
+                </p>
+              </div>
+            </div>
+
+            <UButton
+              class="mt-5 w-full justify-center"
+              size="lg"
+              icon="i-lucide-ticket"
+              label="Lihat Antrean Saya"
+              :to="`/queue/${selectedTicket.token}`"
+              :style="{ backgroundColor: primary }"
+            />
+
+            <!--
+              Mendaftar lagi disengaja dibuat sebagai pilihan kedua: sebagian besar
+              pengunjung yang kembali ke sini hanya ingin melihat nomornya, bukan
+              mengambil nomor baru.
+            -->
+            <UButton
+              v-if="data.features.publicRegistration && data.openState.acceptsNewQueue"
+              class="mt-2 w-full justify-center"
+              size="lg"
+              variant="ghost"
+              color="neutral"
+              icon="i-lucide-plus"
+              label="Registrasi Kembali"
+              @click="daftarLagi"
+            />
+            <p class="mt-2 text-xs text-slate-500">
+              Nomor lama tetap berlaku bila Anda mengambil nomor baru.
+            </p>
+          </div>
         </section>
 
         <!-- Langkah 2: isi formulir -->

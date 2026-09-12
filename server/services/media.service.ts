@@ -7,9 +7,13 @@ import { detectFileType } from '../utils/file-type'
 
 const MAX_IMAGE_BYTES = Number(process.env.MEDIA_MAX_IMAGE_MB || 10) * 1024 * 1024
 const MAX_VIDEO_BYTES = Number(process.env.MEDIA_MAX_VIDEO_MB || 200) * 1024 * 1024
+/** Nada panggil & rekaman pengumuman: hitungan detik, bukan menit — 20 MB berlebih pun cukup. */
+const MAX_AUDIO_BYTES = Number(process.env.MEDIA_MAX_AUDIO_MB || 20) * 1024 * 1024
+
+const LABEL_TIPE: Record<string, string> = { IMAGE: 'gambar', VIDEO: 'video', AUDIO: 'audio' }
 
 export const mediaService = {
-  async list(organizationId: string, params: { type?: 'IMAGE' | 'VIDEO', search?: string } = {}) {
+  async list(organizationId: string, params: { type?: 'IMAGE' | 'VIDEO' | 'AUDIO', search?: string } = {}) {
     const items = await prisma.media.findMany({
       where: {
         organizationId,
@@ -50,19 +54,22 @@ export const mediaService = {
   }) {
     const detected = detectFileType(params.buffer)
     if (!detected) {
-      throw errors.validation('Format berkas tidak didukung. Gunakan JPG, PNG, WEBP, atau MP4.')
+      throw errors.validation('Format berkas tidak didukung. Gunakan JPG, PNG, WEBP, MP4, MP3, WAV, OGG, atau M4A.')
     }
 
-    const limit = detected.kind === 'VIDEO' ? MAX_VIDEO_BYTES : MAX_IMAGE_BYTES
+    const limit = detected.kind === 'VIDEO'
+      ? MAX_VIDEO_BYTES
+      : detected.kind === 'AUDIO' ? MAX_AUDIO_BYTES : MAX_IMAGE_BYTES
     if (params.buffer.length > limit) {
       throw errors.validation(
-        `Ukuran berkas maksimal ${Math.round(limit / 1024 / 1024)} MB untuk ${detected.kind === 'VIDEO' ? 'video' : 'gambar'}`,
+        `Ukuran berkas maksimal ${Math.round(limit / 1024 / 1024)} MB untuk ${LABEL_TIPE[detected.kind]}`,
       )
     }
 
     const filePath = await storage.save(params.buffer, { folder: 'media', extension: detected.extension })
 
-    const duration = detected.kind === 'VIDEO' && Number.isFinite(params.durationSeconds)
+    // Durasi dikirim klien (video & audio sama-sama bisa dibaca elemen media di peramban).
+    const duration = detected.kind !== 'IMAGE' && Number.isFinite(params.durationSeconds)
       ? Math.max(1, Math.min(24 * 3600, Math.round(params.durationSeconds!)))
       : null
 
