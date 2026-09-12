@@ -443,11 +443,11 @@ const captchaConfigured = computed(() => !!useRuntimeConfig().public.turnstileSi
           </UFormField>
 
           <UFormField label="Warna Utama">
-            <UInput v-model="form.primaryColor" type="color" class="w-full" />
+            <UiColorPicker v-model="form.primaryColor" label="Warna utama" />
           </UFormField>
 
           <UFormField label="Warna pendukung">
-            <UInput v-model="form.secondaryColor" type="color" class="w-full" />
+            <UiColorPicker v-model="form.secondaryColor" label="Warna pendukung" />
           </UFormField>
 
           <UFormField label="Logo" hint="opsional">

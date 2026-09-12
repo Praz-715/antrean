@@ -15,7 +15,7 @@ Spesifikasi lengkap ada di [`baca.md`](baca.md); rencana & status pengerjaan ada
 | Lapisan | Pilihan |
 |---|---|
 | Framework | Nuxt 4 (Vue 3, TypeScript strict, Nitro) |
-| UI | Nuxt UI v4 + Tailwind CSS v4 |
+| UI | Nuxt UI v4 + Tailwind CSS v4, pemilih warna Pickr (`UiColorPicker`) |
 | Database | MySQL 8+ / innovation, Prisma 7 (driver adapter MariaDB) |
 | Auth | Better Auth (email/password, sesi cookie) + RBAC tabel sendiri |
 | Realtime | Socket.IO di dalam proses Nitro (WebSocket + fallback polling) |

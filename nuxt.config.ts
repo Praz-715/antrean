@@ -77,6 +77,15 @@ export default defineNuxtConfig({
     },
   },
 
+  /**
+   * Pickr dimuat dinamis dari komponen pemilih warna, jadi Vite baru menemukannya
+   * saat komponen itu dibuka — dan memuat ulang halaman untuk mem-bundle ulang.
+   * Disebut di sini supaya sudah siap sejak server dev dinyalakan.
+   */
+  vite: {
+    optimizeDeps: { include: ['@simonwep/pickr'] },
+  },
+
   nitro: {
     // Socket.IO di-bind ke instance Nitro lewat server/plugins/socket.ts
     experimental: { websocket: true },

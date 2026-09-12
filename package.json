@@ -12,6 +12,7 @@
     "@pinia/nuxt": "^1.0.2",
     "@prisma/adapter-mariadb": "^7.10.0",
     "@prisma/client": "^7.10.0",
+    "@simonwep/pickr": "^1.10.2",
     "better-auth": "^1.7.2",
     "dayjs": "^1.11.23",
     "echarts": "^6.1.0",

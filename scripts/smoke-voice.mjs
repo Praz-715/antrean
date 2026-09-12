@@ -55,10 +55,19 @@ async function api(method, path, body) {
   return res.json().catch(() => null)
 }
 
+/**
+ * Login dianggap berhasil hanya bila cookie sesinya benar-benar terbit.
+ *
+ * Rate limit login membalas 429 dengan badan yang tidak memuat `error`, jadi
+ * pemeriksaan isi respons saja meloloskannya — lalu seluruh langkah berikutnya gagal
+ * diam-diam sebagai "tidak ada suara", yang sama sekali menyesatkan.
+ */
 async function login(email, password) {
   cookie = ''
   const res = await api('POST', '/api/auth/sign-in/email', { email, password })
-  if (!res || res.error) throw new Error(`Login ${email} gagal: ${res?.message ?? res?.error?.message ?? '?'}`)
+  if (!cookie) {
+    throw new Error(`Login ${email} gagal: ${res?.message ?? res?.error?.message ?? 'sesi tidak terbit'}`)
+  }
 }
 
 const tidur = ms => new Promise(r => setTimeout(r, ms))
@@ -93,6 +102,35 @@ async function main() {
     .find(p => p.publishCode === PUBLISH_CODE)
   if (!halaman) throw new Error(`Halaman publik ${PUBLISH_CODE} tidak ditemukan pada event ini`)
   const batasAsli = halaman.maxPerIpPerDay
+
+  /**
+   * Jam layanan dilebarkan sementara bila uji dijalankan di luar jam buka.
+   *
+   * Event sungguhan punya jam tutup; dijalankan lewat jam tutup, pendaftaran
+   * pengunjungnya ditolak dan seluruh pemeriksaan suara gagal karena alasan yang sama
+   * sekali bukan soal suara. Yang diubah jadwalnya — BUKAN statusnya — karena status
+   * event punya aturan transisi sendiri dan tidak selalu bisa dikembalikan; dengan
+   * jadwal, penjadwal bawaan aplikasi yang membuka dan menutupnya kembali.
+   */
+  const jadwalAsli = (eventSebelum?.schedules ?? [])
+    .filter(j => !j.overrideDate)
+    .map(j => ({ dayOfWeek: j.dayOfWeek, openTime: j.openTime, closeTime: j.closeTime, isClosed: j.isClosed }))
+
+  const openStateAwal = await (await fetch(`${BASE}/api/public/${PUBLISH_CODE}`, { headers: { Origin: BASE } })).json()
+  const perluDibuka = !openStateAwal?.data?.openState?.acceptsNewQueue
+
+  if (perluDibuka) {
+    const hariIni = new Date().getDay()
+    await api('PUT', `/api/admin/events/${EVENT_ID}/schedules`, {
+      schedules: Array.from({ length: 7 }, (_, hari) => {
+        const asli = jadwalAsli.find(j => j.dayOfWeek === hari)
+        if (hari !== hariIni) return asli ?? { dayOfWeek: hari, openTime: '08:00', closeTime: '16:00', isClosed: true }
+        return { dayOfWeek: hari, openTime: '00:00', closeTime: '23:59', isClosed: false }
+      }),
+    })
+    await api('POST', '/api/admin/scheduler/run')
+    console.log(`  (jam layanan dilebarkan sementara — semula: ${openStateAwal?.data?.openState?.message})`)
+  }
 
   const perangkat = (await api('POST', '/api/admin/displays', {
     eventId: EVENT_ID,
@@ -186,10 +224,35 @@ async function main() {
     await browser.close()
     await login(ADMIN.email, ADMIN.password).catch(() => {})
 
-    // Kembalikan persis seperti semula: pengaturan event, batas IP, perangkat uji.
-    await api('PATCH', `/api/admin/events/${EVENT_ID}`, { settings: settingsAsli }).catch(() => {})
+    /**
+     * Pengembalian keadaan DIPERIKSA, bukan sekadar dikirim.
+     *
+     * Uji ini menyentuh pengaturan event milik pengguna sungguhan. Pada satu jalan
+     * sebelumnya, login untuk tahap bersih-bersih tertolak rate limit dan seluruh
+     * PATCH gagal diam-diam — event tertinggal pada mode "hanya nada panggil" dengan
+     * nada uji, dan tidak ada satu baris pun yang memberitahu. Sekarang hasilnya
+     * dibaca ulang dan ketidakcocokan dilaporkan sebagai kegagalan.
+     */
+    const dipulihkan = await api('PATCH', `/api/admin/events/${EVENT_ID}`, { settings: settingsAsli }).catch(() => null)
     await api('PATCH', `/api/admin/public-pages/${halaman.id}`, { maxPerIpPerDay: batasAsli }).catch(() => {})
     await api('DELETE', `/api/admin/displays/${perangkat.id}`).catch(() => {})
+
+    if (perluDibuka && jadwalAsli.length) {
+      await api('PUT', `/api/admin/events/${EVENT_ID}/schedules`, { schedules: jadwalAsli }).catch(() => {})
+      await api('POST', '/api/admin/scheduler/run').catch(() => {})
+    }
+
+    const sesudah = (await api('GET', `/api/admin/events/${EVENT_ID}`).catch(() => null))?.data?.settings ?? null
+    const samaPersis = JSON.stringify(sesudah ?? {}) === JSON.stringify(settingsAsli ?? {})
+    const jadwalSekarang = ((await api('GET', `/api/admin/events/${EVENT_ID}`).catch(() => null))?.data?.schedules ?? [])
+      .filter(j => !j.overrideDate)
+      .map(j => ({ dayOfWeek: j.dayOfWeek, openTime: j.openTime, closeTime: j.closeTime, isClosed: j.isClosed }))
+    record('jam layanan dikembalikan seperti semula',
+      !perluDibuka || JSON.stringify(jadwalSekarang) === JSON.stringify(jadwalAsli),
+      perluDibuka ? JSON.stringify(jadwalSekarang.find(j => j.dayOfWeek === new Date().getDay())) : 'tidak diubah')
+
+    record('pengaturan event dikembalikan seperti semula', !!dipulihkan?.success && samaPersis,
+      samaPersis ? JSON.stringify(sesudah) : `sekarang ${JSON.stringify(sesudah)}, seharusnya ${JSON.stringify(settingsAsli)}`)
 
     // Antrean uji dibatalkan supaya papan hari ini tidak tercemar.
     const sisa = await api('GET', `/api/admin/queues?eventId=${EVENT_ID}&perPage=100`).catch(() => null)
@@ -272,15 +335,24 @@ async function panggilDanDengar(context, deviceCode, layanan, form, nomorUji) {
   }).then(r => r.json())
   if (tiket?.data?.queueNumber) nomorUji.add(tiket.data.queueNumber)
 
+  if (!tiket?.data?.queueNumber) {
+    throw new Error(`Pengunjung uji gagal mengambil nomor: ${tiket?.message ?? 'tanpa pesan'}`)
+  }
+
   const cookieAdmin = cookie
   await login(OPERATOR.email, OPERATOR.password)
   const workspace = (await api('GET', '/api/operator/workspace')).data ?? []
   const penugasan = workspace.find(a => a.queueType.id === layanan.id) ?? workspace[0]
-  if (penugasan) {
-    await api('POST', '/api/operator/queue/next', {
-      queueTypeId: penugasan.queueType.id,
-      counterId: penugasan.counter?.id ?? null,
-    })
+  if (!penugasan) {
+    throw new Error(`Operator ${OPERATOR.email} tidak ditempatkan pada loket yang melayani layanan ini`)
+  }
+
+  const panggilan = await api('POST', '/api/operator/queue/next', {
+    queueTypeId: penugasan.queueType.id,
+    counterId: penugasan.counter?.id ?? null,
+  })
+  if (!panggilan?.success) {
+    throw new Error(`Operator gagal memanggil: ${panggilan?.message ?? 'tanpa pesan'}`)
   }
   cookie = cookieAdmin
 

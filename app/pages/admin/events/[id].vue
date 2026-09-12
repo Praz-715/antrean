@@ -548,16 +548,10 @@ function copyAll(fromDay: number) {
         <div class="space-y-4">
           <div class="grid gap-4 sm:grid-cols-2">
             <UFormField label="Warna utama">
-              <div class="flex gap-2">
-                <UInput v-model="branding.primaryColor" type="color" class="w-16" :disabled="!can(PERMISSIONS.EVENT_MANAGE)" />
-                <UInput v-model="branding.primaryColor" class="w-full font-mono text-sm" :disabled="!can(PERMISSIONS.EVENT_MANAGE)" />
-              </div>
+              <UiColorPicker v-model="branding.primaryColor" label="Warna utama" :disabled="!can(PERMISSIONS.EVENT_MANAGE)" />
             </UFormField>
             <UFormField label="Warna pendukung">
-              <div class="flex gap-2">
-                <UInput v-model="branding.secondaryColor" type="color" class="w-16" :disabled="!can(PERMISSIONS.EVENT_MANAGE)" />
-                <UInput v-model="branding.secondaryColor" class="w-full font-mono text-sm" :disabled="!can(PERMISSIONS.EVENT_MANAGE)" />
-              </div>
+              <UiColorPicker v-model="branding.secondaryColor" label="Warna pendukung" :disabled="!can(PERMISSIONS.EVENT_MANAGE)" />
             </UFormField>
           </div>
 

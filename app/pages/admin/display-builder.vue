@@ -938,10 +938,22 @@ const layers = computed(() =>
                   />
                 </UFormField>
                 <UFormField label="Warna Teks" size="xs">
-                  <UInput v-model="selected.style.color as string" type="color" class="w-full" size="sm" />
+                  <UiColorPicker
+                    :model-value="(selected.style.color as string) ?? '#ffffff'"
+                    label="Warna teks widget"
+                    alpha
+                    hide-input
+                    @update:model-value="(v: string) => { selected!.style.color = v; onPropertyChange() }"
+                  />
                 </UFormField>
                 <UFormField label="Latar" size="xs">
-                  <UInput v-model="selected.style.backgroundColor as string" type="color" class="w-full" size="sm" />
+                  <UiColorPicker
+                    :model-value="(selected.style.backgroundColor as string) ?? '#0f172a'"
+                    label="Warna latar widget"
+                    alpha
+                    hide-input
+                    @update:model-value="(v: string) => { selected!.style.backgroundColor = v; onPropertyChange() }"
+                  />
                 </UFormField>
                 <UFormField label="Perataan" size="xs">
                   <USelect
@@ -1003,7 +1015,12 @@ const layers = computed(() =>
               Latar Layar
             </h2>
             <div class="flex items-center gap-2">
-              <UInput v-model="background.color as string" type="color" class="w-20" size="sm" />
+              <UiColorPicker
+                :model-value="(background.color as string) ?? '#020617'"
+                label="Warna latar layar"
+                hide-input
+                @update:model-value="(v: string) => (background.color = v)"
+              />
               <USelect
                 v-model="backgroundImage"
                 :items="[{ label: '— tanpa gambar —', value: SELECT_NONE }, ...mediaList.filter(m => m.type === 'IMAGE').map(m => ({ label: m.name, value: m.url }))]"

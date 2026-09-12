@@ -321,18 +321,24 @@ const PRESET_COLORS = ['#1b5cf5', '#7c3aed', '#0d9488', '#ea580c', '#dc2626', '#
             <UInputNumber v-model="form.maxWaiting" :min="0" class="w-full" />
           </UFormField>
 
-          <UFormField label="Warna" class="sm:col-span-2">
+          <UFormField label="Warna" class="sm:col-span-2" help="Dipakai pada lencana layanan, nomor di layar antrean, dan grafik laporan.">
             <div class="flex flex-wrap items-center gap-2">
+              <!--
+                Warna cepat tetap ditampilkan sebagai tombol: sekali klik untuk delapan
+                warna yang paling sering dipakai, tanpa harus membuka pemilih warna.
+              -->
               <button
                 v-for="c in PRESET_COLORS"
                 :key="c"
                 type="button"
+                :aria-label="`Pakai warna ${c}`"
+                :title="c"
                 class="size-8 rounded-lg border-2 transition-transform hover:scale-110"
                 :style="{ backgroundColor: c, borderColor: form.color === c ? c : 'transparent' }"
                 :class="{ 'ring-2 ring-offset-2 ring-slate-400': form.color === c }"
                 @click="form.color = c"
               />
-              <UInput v-model="form.color" class="w-32" size="sm" />
+              <UiColorPicker v-model="form.color" label="Warna layanan" :swatches="PRESET_COLORS" class="w-44" />
             </div>
           </UFormField>
 
