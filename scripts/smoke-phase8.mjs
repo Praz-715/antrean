@@ -4,6 +4,8 @@
  *
  * Jalankan: npm run smoke:phase8   (server dev harus sudah berjalan)
  */
+import { headerCaptcha } from './captcha.mjs'
+
 /** Alamat server yang diuji; timpa dengan SMOKE_BASE untuk menguji hasil build. */
 const BASE = process.env.SMOKE_BASE || 'http://localhost:3000'
 const results = []
@@ -18,6 +20,7 @@ async function api(method, path, body, extraHeaders = {}) {
   const res = await fetch(BASE + path, {
     method,
     headers: {
+      ...(await headerCaptcha(BASE, path)),
       'Content-Type': 'application/json',
       'Origin': BASE,
       ...(cookie ? { cookie } : {}),

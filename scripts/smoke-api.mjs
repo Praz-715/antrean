@@ -2,6 +2,8 @@
  * Sapu seluruh endpoint tulis untuk menemukan jalur yang belum pernah dieksekusi.
  * Jalankan: node audit-endpoints.mjs
  */
+import { headerCaptcha } from './captcha.mjs'
+
 /** Alamat server yang diuji; timpa dengan SMOKE_BASE untuk menguji hasil build. */
 const BASE = process.env.SMOKE_BASE || 'http://localhost:3000'
 let cookie = ''
@@ -10,7 +12,7 @@ const results = []
 async function call(method, path, body, opts = {}) {
   const res = await fetch(BASE + path, {
     method,
-    headers: { 'Content-Type': 'application/json', Origin: BASE, ...(cookie ? { cookie } : {}), ...(opts.headers ?? {}) },
+    headers: { ...(await headerCaptcha(BASE, path)), 'Content-Type': 'application/json', Origin: BASE, ...(cookie ? { cookie } : {}), ...(opts.headers ?? {}) },
     ...(body !== undefined ? { body: JSON.stringify(body) } : {}),
   })
   const setCookie = res.headers.getSetCookie?.() ?? []

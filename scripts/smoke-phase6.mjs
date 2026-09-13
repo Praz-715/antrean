@@ -6,6 +6,8 @@
  */
 import { chromium } from 'playwright'
 
+import { headerCaptcha, masukLewatUi } from './captcha.mjs'
+
 /** Alamat server yang diuji; timpa dengan SMOKE_BASE untuk menguji hasil build. */
 const BASE = process.env.SMOKE_BASE || 'http://localhost:3000'
 const results = []
@@ -19,7 +21,7 @@ let cookie = ''
 async function api(method, path, body) {
   const res = await fetch(BASE + path, {
     method,
-    headers: { 'Content-Type': 'application/json', Origin: BASE, ...(cookie ? { cookie } : {}) },
+    headers: { ...(await headerCaptcha(BASE, path)), 'Content-Type': 'application/json', Origin: BASE, ...(cookie ? { cookie } : {}) },
     ...(body ? { body: JSON.stringify(body) } : {}),
   })
   const sc = res.headers.getSetCookie?.() ?? []
@@ -202,9 +204,7 @@ async function main() {
 
     await view.goto(`${BASE}/login`, { waitUntil: 'domcontentloaded' })
     await view.waitForFunction(() => !!document.querySelector('#__nuxt')?.__vue_app__, null, { timeout: 30_000 })
-    await view.locator('input[type="email"]').fill('superadmin@antrean.local')
-    await view.locator('input[type="password"]').fill('password123')
-    await view.locator('button[type="submit"]').click()
+    await masukLewatUi(view, BASE, 'superadmin@antrean.local')
     await view.waitForURL(/\/admin\//, { timeout: 30_000 })
 
     // arahkan ke event uji

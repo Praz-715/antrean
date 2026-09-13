@@ -11,6 +11,7 @@ const bodySchema = z.object({
   name: z.string().trim().min(2, 'Nama minimal 2 karakter').max(150).optional(),
   description: z.string().trim().max(500).optional().nullable(),
   dataSourceId: idSchema.nullable().optional(),
+  requireCaptcha: z.boolean().optional(),
 })
 
 export default defineApiHandler(async (event) => {
@@ -27,7 +28,7 @@ export default defineApiHandler(async (event) => {
     action: AUDIT_ACTIONS.FORM_UPDATED,
     entity: 'FormDefinition',
     entityId: id,
-    newData: { name: form.name, dataSourceId: form.dataSourceId },
+    newData: { name: form.name, dataSourceId: form.dataSourceId, requireCaptcha: form.requireCaptcha },
   })
 
   return ok(form, 'Formulir diperbarui')

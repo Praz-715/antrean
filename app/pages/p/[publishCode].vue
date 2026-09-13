@@ -51,6 +51,7 @@ interface PublicPageData {
     id: string
     name: string
     description: string | null
+    requireCaptcha: boolean
     autofillFieldKey: string | null
     fields: FormFieldDef[]
   } | null
@@ -174,6 +175,17 @@ const captchaToken = ref('')
 const captchaRef = ref<{ reset: () => void } | null>(null)
 const captchaRequired = computed(() => !!data.value?.page.requireCaptcha && !!turnstileSiteKey)
 
+/**
+ * Captcha geser — dinyalakan per formulir di /admin/forms.
+ *
+ * Berdiri sendiri dari Turnstile di atas: yang ini tidak butuh kunci dari layanan
+ * luar, jadi bisa dipakai pada pemasangan yang tidak terhubung ke Cloudflare.
+ * Jendelanya baru muncul saat tombol ambil nomor ditekan, supaya pengunjung tidak
+ * mengerjakan teka-teki sebelum isiannya sendiri lengkap.
+ */
+const sliderRef = ref<{ minta: () => Promise<string | null> } | null>(null)
+const sliderRequired = computed(() => !!data.value?.form?.requireCaptcha)
+
 watchEffect(() => {
   for (const field of data.value?.form?.fields ?? []) {
     if (values[field.key] === undefined) {
@@ -283,6 +295,15 @@ function optionsOf(field: FormFieldDef): Array<{ label: string, value: string }>
 
 async function submit() {
   if (!selectedTypeId.value || submitting.value) return
+
+  let sliderToken: string | undefined
+  if (sliderRequired.value) {
+    const tiket = await sliderRef.value?.minta()
+    // Jendela verifikasi ditutup — isian tetap utuh, pengunjung bisa menekan lagi.
+    if (!tiket) return
+    sliderToken = tiket
+  }
+
   submitting.value = true
   submitError.value = ''
   fieldErrors.value = {}
@@ -290,7 +311,7 @@ async function submit() {
   try {
     const result = await apiFetch<{ token: string }>(`/api/public/${publishCode}/queue`, {
       method: 'POST',
-      body: { queueTypeId: selectedTypeId.value, values, captchaToken: captchaToken.value || undefined },
+      body: { queueTypeId: selectedTypeId.value, values, captchaToken: captchaToken.value || undefined, sliderToken },
     })
     // Diingat supaya kunjungan berikutnya menampilkan nomor ini, bukan formulir kosong.
     tickets.remember(selectedTypeId.value, result.token)
@@ -686,6 +707,8 @@ function minutesLabel(seconds: number, count: number) {
               icon="i-lucide-ticket"
               :style="{ backgroundColor: primary }"
             />
+
+            <UiSliderCaptcha v-if="sliderRequired" ref="sliderRef" purpose="queue" />
           </form>
         </section>
 

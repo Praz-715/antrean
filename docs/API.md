@@ -60,6 +60,8 @@ semua respons memakai amplop yang sama.
 | `DATA_SOURCE_INVALID_RESPONSE` | 400 | Respons sumber data bukan JSON yang valid |
 | `DATA_SOURCE_DISABLED` | 400 | Integrasi tidak aktif / formulir tidak terhubung |
 | `AUTOFILL_NOT_FOUND` | 400 | Data yang dicari tidak ditemukan di sistem eksternal |
+| `CAPTCHA_REQUIRED` | 400 | Verifikasi anti-bot belum diselesaikan |
+| `CAPTCHA_INVALID` | 400 | Tiket captcha salah, kedaluwarsa, atau sudah dipakai |
 
 ---
 
@@ -76,7 +78,7 @@ Content-Type: application/json
 
 | Endpoint | Fungsi |
 |---|---|
-| `POST /api/auth/sign-in/email` | Masuk |
+| `POST /api/auth/sign-in/email` | Masuk — wajib header `x-captcha-token` (lihat Captcha Geser) |
 | `POST /api/auth/sign-out` | Keluar |
 | `GET /api/auth/get-session` | Sesi mentah Better Auth |
 | `GET /api/me` | Profil + role + permission + assignment (dipakai UI) |
@@ -96,6 +98,64 @@ Content-Type: application/json
 
 > Role `SUPERADMIN` mengembalikan `permissions: []` karena ia melewati seluruh pemeriksaan izin
 > (`isSuperadmin: true`). Klien wajib memeriksa flag tersebut, bukan hanya daftar permission.
+
+---
+
+## Captcha Geser (tanpa login)
+
+Verifikasi anti-bot bawaan sistem — tidak memakai layanan luar. Dipakai halaman masuk (selalu) dan
+pengambilan nomor antrean (bila formulir aktif menyalakannya di `/admin/forms`).
+
+Alurnya tiga langkah: minta teka-teki → kirim posisi potongan → pakai tiket yang terbit.
+
+### `GET /api/captcha/slider?purpose=login|queue`
+
+Rate limit 40 permintaan/menit per IP.
+
+```json
+{
+  "id": "GSdn0SJCGjv38QOnl9jnaA",
+  "background": "data:image/png;base64,…",
+  "piece": "data:image/png;base64,…",
+  "pieceY": 42,
+  "width": 280,
+  "height": 170,
+  "pieceSize": 52
+}
+```
+
+Posisi mendatar lubang TIDAK ada dalam respons — hanya ada di server.
+
+### `POST /api/captcha/slider`
+
+Kirim posisi kiri potongan saat dilepas. Rate limit 30 permintaan/menit per IP; tiap teka-teki
+hanya menerima 4 percobaan, setelah itu harus meminta teka-teki baru.
+
+```json
+{ "id": "GSdn0SJCGjv38QOnl9jnaA", "x": 183, "durationMs": 640, "moves": 14, "purpose": "login" }
+```
+
+Respons berisi tiket sekali pakai, berumur 5 menit, terikat pada alamat IP dan `purpose`:
+
+```json
+{ "token": "P6iY5agE0du4…" }
+```
+
+Gagal menjawab mengembalikan `400` `CAPTCHA_INVALID`; geseran yang terlalu cepat atau tanpa
+gerakan menengah ditolak walau posisinya tepat.
+
+### Memakai tiket
+
+| Keperluan | Cara mengirim |
+|---|---|
+| `login` | Header `x-captcha-token` pada `POST /api/auth/sign-in/email` |
+| `queue` | Field `sliderToken` pada `POST /api/public/{publishCode}/queue` |
+
+Tanpa tiket: `400` `CAPTCHA_REQUIRED`. Tiket yang sudah dipakai, kedaluwarsa, milik alamat IP
+lain, atau dari `purpose` berbeda: `400` `CAPTCHA_INVALID`.
+
+> `GET /api/captcha/answer?id=…` membuka posisi jawaban untuk uji otomatis. Hanya hidup bila
+> `CAPTCHA_DEV_BYPASS=1` dan `NODE_ENV` bukan `production`; selain itu menjawab `404`.
 
 ---
 
@@ -139,6 +199,10 @@ Respons `201`:
 ```
 
 `values` divalidasi terhadap definisi formulir aktif milik event — field yang tidak dikenal dibuang.
+
+Bila formulir aktif menyalakan `requireCaptcha`, sertakan `sliderToken` hasil captcha geser —
+tanpa itu permintaan ditolak `400` `CAPTCHA_REQUIRED`. Status wajib-tidaknya dikabarkan pada
+`GET /api/public/{publishCode}` sebagai `form.requireCaptcha`.
 
 ### `GET /api/public/{publishCode}/status`
 
@@ -372,6 +436,7 @@ versi QR bertambah, dan versi lama tetap tersimpan untuk audit.
 |---|---|
 | `GET/POST /api/admin/forms` | `form.view` / `form.manage` |
 | `GET/DELETE /api/admin/forms/{id}` | `form.view` / `form.manage` |
+| `PATCH /api/admin/forms/{id}` | `form.manage` — `name`, `description`, `dataSourceId`, `requireCaptcha` |
 | `PUT /api/admin/forms/{id}/fields` | `form.manage` |
 | `POST /api/admin/forms/{id}/activate` | `form.manage` |
 

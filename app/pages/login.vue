@@ -13,6 +13,15 @@ const loading = ref(false)
 const errorMessage = ref('')
 
 /**
+ * Verifikasi geser muncul setelah tombol Masuk ditekan, bukan sebagai isian ketiga
+ * di dalam formulir: orang yang mengetik email dan kata sandi dengan benar tidak
+ * perlu diminta menyelesaikan teka-teki lebih dulu untuk tahu apakah datanya sudah
+ * betul. Servernya menolak permintaan masuk tanpa tiket, jadi jendela ini tidak
+ * bisa dilewati dengan mengubah halaman.
+ */
+const captcha = ref<{ minta: () => Promise<string | null> } | null>(null)
+
+/**
  * Terjemahkan galat dari Better Auth.
  *
  * Pesan bawaannya berbahasa Inggris ("Too many requests. Please try again later."),
@@ -42,9 +51,18 @@ function loginErrorMessage(error: { message?: string, status?: number }) {
 async function onSubmit() {
   if (loading.value) return
   errorMessage.value = ''
+
+  const tiket = await captcha.value?.minta()
+  // Jendela ditutup tanpa menyelesaikan teka-teki — tidak ada yang perlu dikabarkan.
+  if (!tiket) return
+
   loading.value = true
 
-  const { error } = await signIn.email({ email: form.email.trim(), password: form.password })
+  const { error } = await signIn.email({
+    email: form.email.trim(),
+    password: form.password,
+    fetchOptions: { headers: { 'x-captcha-token': tiket } },
+  })
 
   if (error) {
     errorMessage.value = loginErrorMessage(error)
@@ -166,6 +184,8 @@ async function onSubmit() {
             icon="i-lucide-log-in"
           />
         </form>
+
+        <UiSliderCaptcha ref="captcha" purpose="login" />
 
         <div class="mt-8 rounded-lg border border-dashed border-slate-300 p-4 text-xs text-slate-500 dark:border-slate-700">
           <p class="mb-2 font-semibold text-slate-600 dark:text-slate-400">

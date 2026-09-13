@@ -9,6 +9,8 @@
  */
 import { chromium } from 'playwright'
 
+import { headerCaptcha, masukLewatUi } from './captcha.mjs'
+
 /** Alamat server yang diuji; timpa dengan SMOKE_BASE untuk menguji hasil build. */
 const BASE = process.env.SMOKE_BASE || 'http://localhost:3000'
 const results = []
@@ -22,7 +24,7 @@ let cookie = ''
 async function api(method, path, body) {
   const res = await fetch(BASE + path, {
     method,
-    headers: { 'Content-Type': 'application/json', Origin: BASE, ...(cookie ? { cookie } : {}) },
+    headers: { ...(await headerCaptcha(BASE, path)), 'Content-Type': 'application/json', Origin: BASE, ...(cookie ? { cookie } : {}) },
     ...(body ? { body: JSON.stringify(body) } : {}),
   })
   const sc = res.headers.getSetCookie?.() ?? []
@@ -245,9 +247,7 @@ async function main() {
     const admin = await context.newPage()
     await admin.goto(`${BASE}/login`, { waitUntil: 'domcontentloaded' })
     await waitHydrated(admin)
-    await admin.locator('input[type="email"]').fill('superadmin@antrean.local')
-    await admin.locator('input[type="password"]').fill('password123')
-    await admin.locator('button[type="submit"]').click()
+    await masukLewatUi(admin, BASE, 'superadmin@antrean.local')
     await admin.waitForURL(/\/admin\//, { timeout: 30_000 })
 
     // perlambat API supaya indikator sempat teramati (hanya selama uji ini)

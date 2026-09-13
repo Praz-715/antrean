@@ -13,6 +13,8 @@ const bodySchema = z.object({
   queueTypeId: idSchema,
   values: z.record(z.string(), z.unknown()).default({}),
   captchaToken: z.string().max(4000).optional().nullable(),
+  /** Tiket captcha geser; diminta bila formulir aktif mewajibkannya. */
+  sliderToken: z.string().max(200).optional().nullable(),
 })
 
 /** Pengunjung mengambil nomor antrean. */
@@ -28,6 +30,7 @@ export default defineApiHandler(async (event) => {
     queueTypeId: body.queueTypeId,
     values: body.values,
     captchaToken: body.captchaToken,
+    sliderToken: body.sliderToken,
     ipAddress: clientIp(event),
     userAgent: getRequestHeader(event, 'user-agent') ?? null,
   })

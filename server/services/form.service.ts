@@ -63,7 +63,7 @@ export const formService = {
   async update(
     organizationId: string,
     id: string,
-    input: { name?: string, description?: string | null, dataSourceId?: string | null },
+    input: { name?: string, description?: string | null, dataSourceId?: string | null, requireCaptcha?: boolean },
   ) {
     await this.getById(organizationId, id)
 
@@ -83,6 +83,7 @@ export const formService = {
         ...(input.name !== undefined ? { name: input.name } : {}),
         ...(input.description !== undefined ? { description: input.description } : {}),
         ...(input.dataSourceId !== undefined ? { dataSourceId: input.dataSourceId } : {}),
+        ...(input.requireCaptcha !== undefined ? { requireCaptcha: input.requireCaptcha } : {}),
       },
     })
     return this.getById(organizationId, id)

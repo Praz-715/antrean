@@ -7,6 +7,8 @@
 import { chromium } from 'playwright'
 import { deflateSync } from 'node:zlib'
 
+import { headerCaptcha } from './captcha.mjs'
+
 /** Alamat server yang diuji; timpa dengan SMOKE_BASE untuk menguji hasil build. */
 const BASE = process.env.SMOKE_BASE || 'http://localhost:3000'
 const results = []
@@ -21,6 +23,7 @@ async function api(method, path, body, isForm = false) {
   const res = await fetch(BASE + path, {
     method,
     headers: {
+      ...(await headerCaptcha(BASE, path)),
       Origin: BASE,
       ...(isForm ? {} : { 'Content-Type': 'application/json' }),
       ...(cookie ? { cookie } : {}),

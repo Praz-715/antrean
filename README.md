@@ -257,6 +257,16 @@ tampilannya berubah terang hanya bila pengguna memang memilih tema terang.
   menampilkannya sebagai bilah pemilih layanan. Loket tanpa layanan tidak bisa ditempati, dan
   layanan loket tidak bisa dikosongkan selama masih ada operator di sana. Konsekuensinya skrip uji
   membuat operator + loketnya sendiri — bukan memakai akun operator demo bersama.
+- **Captcha geser (§36).** Halaman masuk selalu, dan pengambilan nomor antrean bila dinyalakan
+  pada formulir aktif di `/admin/forms`. Dijalankan sendiri oleh server ini — tidak perlu kunci
+  dari layanan luar seperti Turnstile. Kedua gambarnya (latar berlubang dan potongannya) dibuat
+  di server oleh encoder PNG kecil di `server/utils/png.ts`; posisi lubang tidak pernah dikirim
+  ke peramban. Jawaban yang pas ditukar dengan tiket sekali pakai yang terikat pada alamat IP dan
+  keperluannya, jadi tiket dari halaman publik tidak bisa dipakai untuk masuk. Pemeriksaannya ada
+  di sisi server (`server/middleware/login-captcha.ts` dan `publicPageService.register`),
+  sehingga mengubah halaman di peramban tidak melewatkannya.
+  Uji otomatis membuka jawabannya lewat `GET /api/captcha/answer`, yang hanya hidup bila
+  `CAPTCHA_DEV_BYPASS=1` DAN `NODE_ENV` bukan `production` — di luar itu endpoint-nya 404.
 - **Arti status event.** Penutupan harian mengembalikan event ke `SCHEDULED`, bukan `CLOSED`.
   Pembukaan otomatis hanya menyentuh event `SCHEDULED`, jadi menandainya `CLOSED` akan membuat
   layanan harian berhenti selamanya setelah satu kali tutup. `CLOSED` disimpan untuk akhir yang

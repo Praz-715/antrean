@@ -1,10 +1,12 @@
+import { headerCaptcha } from './captcha.mjs'
+
 /** Alamat server yang diuji; timpa dengan SMOKE_BASE untuk menguji hasil build. */
 const BASE = process.env.SMOKE_BASE || 'http://localhost:3000'
 let cookie = ''
 const call = async (m, p, b) => {
   const r = await fetch(BASE + p, {
     method: m,
-    headers: { 'Content-Type': 'application/json', Origin: BASE, ...(cookie ? { cookie } : {}) },
+    headers: { ...(await headerCaptcha(BASE, p)), 'Content-Type': 'application/json', Origin: BASE, ...(cookie ? { cookie } : {}) },
     ...(b ? { body: JSON.stringify(b) } : {}),
   })
   const sc = r.headers.getSetCookie?.() ?? []

@@ -4,6 +4,7 @@ import { ERROR_CODES } from '../../shared/constants/errors'
 import { resolveServiceDate } from '../utils/datetime'
 import { buildFormValidator, extractVisitorCore } from '../utils/dynamic-form'
 import { verifyCaptcha } from '../utils/captcha'
+import { consumeTicket } from '../utils/slider-captcha'
 import { eventService } from './event.service'
 import { queueService } from './queue.service'
 import { settingService } from './setting.service'
@@ -111,6 +112,8 @@ export const publicPageService = {
             id: form.id,
             name: form.name,
             description: form.description,
+            /** Halaman publik memunculkan captcha geser sebelum mengirim bila ini menyala (§36). */
+            requireCaptcha: form.requireCaptcha,
             /**
              * Field pemicu autofill — halaman publik menampilkan tombol "Cari data"
              * di sebelahnya. Kosong berarti fitur ini tidak aktif untuk formulir itu.
@@ -175,6 +178,7 @@ export const publicPageService = {
     queueTypeId: string
     values: Record<string, unknown>
     captchaToken?: string | null
+    sliderToken?: string | null
     ipAddress?: string | null
     userAgent?: string | null
   }) {
@@ -207,6 +211,22 @@ export const publicPageService = {
     // Anti-bot (§36) — diperiksa sebelum apa pun menyentuh database
     if (page.requireCaptcha) {
       await verifyCaptcha(params.captchaToken, params.ipAddress)
+    }
+
+    /**
+     * Captcha geser, dinyalakan per formulir di /admin/forms.
+     *
+     * Kuerinya sengaja hanya mengambil satu kolom: pemeriksaan anti-bot berdiri
+     * paling depan, jadi permintaan dari skrip tidak boleh sempat menarik seluruh
+     * definisi formulir beserta field-nya.
+     */
+    const gerbang = await prisma.formDefinition.findFirst({
+      where: { eventId: page.eventId, isActive: true },
+      orderBy: { createdAt: 'desc' },
+      select: { requireCaptcha: true },
+    })
+    if (gerbang?.requireCaptcha) {
+      consumeTicket(params.sliderToken, 'queue', params.ipAddress ?? 'unknown')
     }
 
     // Event harus benar-benar sedang melayani

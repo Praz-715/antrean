@@ -598,6 +598,8 @@ model FormDefinition {
   description  String?  @db.VarChar(500)
   version      Int      @default(1)
   isActive     Boolean  @default(true) @map("is_active")
+  /** Pengunjung harus menyelesaikan captcha geser sebelum nomor antrean terbit (§36). */
+  requireCaptcha Boolean @default(false) @map("require_captcha")
   dataSourceId String?  @map("data_source_id") @db.Char(26)
   createdAt    DateTime @default(now()) @map("created_at") @db.DateTime(3)
   updatedAt    DateTime @updatedAt @map("updated_at") @db.DateTime(3)

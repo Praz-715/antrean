@@ -13,6 +13,8 @@
  */
 import { chromium } from 'playwright'
 
+import { geserSampaiPas, headerCaptcha, masukLewatUi, pantauTekaTeki } from './captcha.mjs'
+
 /** Alamat server yang diuji; timpa dengan SMOKE_BASE untuk menguji hasil build. */
 const BASE = process.env.SMOKE_BASE || 'http://localhost:3000'
 const findings = []
@@ -37,7 +39,7 @@ let cookie = ''
 async function api(method, path, body) {
   const res = await fetch(BASE + path, {
     method,
-    headers: { 'Content-Type': 'application/json', Origin: BASE, ...(cookie ? { cookie } : {}) },
+    headers: { ...(await headerCaptcha(BASE, path)), 'Content-Type': 'application/json', Origin: BASE, ...(cookie ? { cookie } : {}) },
     ...(body ? { body: JSON.stringify(body) } : {}),
   })
   const sc = res.headers.getSetCookie?.() ?? []
@@ -160,25 +162,54 @@ async function main() {
     // A1. Kredensial salah harus dijelaskan, bukan gagal diam-diam
     await page.goto(`${BASE}/login`, { waitUntil: 'domcontentloaded' })
     await hydrated(page)
+
+    /**
+     * Captcha geser muncul lebih dulu, bahkan untuk kata sandi yang salah (§36).
+     * Idnya disadap dari respons karena memang tidak pernah ada di DOM.
+     */
+    const tekaTeki = pantauTekaTeki(page)
+
+    /**
+     * Status tiap percobaan masuk direkam sejak awal. Rate limit Better Auth
+     * (30/menit) menjawab dengan pesan "terlalu banyak percobaan" yang wajar tetapi
+     * bukan pesan kredensial salah — tanpa membedakan keduanya, audit melaporkan
+     * cacat antarmuka padahal yang terjadi hanyalah audit dijalankan beruntun.
+     */
+    const signInCalls = []
+    page.on('response', (res) => {
+      if (res.url().includes('/api/auth/sign-in')) signInCalls.push(res.status())
+    })
+
+    async function pesanGagalTampil() {
+      return waitFor(async () => {
+        const text = await page.locator('body').innerText()
+        return /salah|tidak valid|gagal|invalid/i.test(text)
+      }, 15_000)
+    }
+
     await page.locator('input[type="email"]').fill('superadmin@antrean.local')
     await page.locator('input[type="password"]').fill('sandi-yang-salah')
     await page.locator('button[type="submit"]').click()
-    const errorShown = await waitFor(async () => {
-      const text = await page.locator('body').innerText()
-      return /salah|tidak valid|gagal|invalid/i.test(text)
-    }, 15_000)
+    await geserSampaiPas(page, BASE, tekaTeki)
+    let errorShown = await pesanGagalTampil()
+    if (!errorShown && signInCalls.includes(429)) {
+      console.log('  catatan: login dibatasi rate limit (429); menunggu 60 detik lalu mencoba sekali lagi')
+      await page.waitForTimeout(60_000)
+      await page.locator('input[type="password"]').fill('sandi-yang-salah')
+      await page.locator('button[type="submit"]').click()
+      await geserSampaiPas(page, BASE, tekaTeki)
+      errorShown = await pesanGagalTampil()
+    }
+
     check('FUNGSI', 'login gagal menampilkan pesan yang bisa dipahami', errorShown,
       errorShown ? 'pesan galat tampil' : 'tidak ada pesan apa pun setelah login gagal')
     check('FUNGSI', 'login gagal tidak memindahkan pengguna dari halaman login',
       page.url().includes('/login'), page.url().replace(BASE, ''))
 
     // A2. Enter di kolom sandi harus mengirim formulir (bukan wajib klik tombol)
-    const signInCalls = []
-    page.on('response', (res) => {
-      if (res.url().includes('/api/auth/sign-in')) signInCalls.push(res.status())
-    })
     await page.locator('input[type="password"]').fill('password123')
     await page.locator('input[type="password"]').press('Enter')
+    await geserSampaiPas(page, BASE, tekaTeki)
     let loggedIn = await page.waitForURL(/\/admin\//, { timeout: 30_000 }).then(() => true).catch(() => false)
 
     /**
@@ -193,6 +224,7 @@ async function main() {
       await page.waitForTimeout(60_000)
       await page.locator('input[type="password"]').fill('password123')
       await page.locator('input[type="password"]').press('Enter')
+      await geserSampaiPas(page, BASE, tekaTeki)
       loggedIn = await page.waitForURL(/\/admin\//, { timeout: 30_000 }).then(() => true).catch(() => false)
     }
     check('UX', 'Enter di formulir login langsung mengirim', loggedIn, page.url().replace(BASE, ''))
@@ -200,9 +232,7 @@ async function main() {
     if (!loggedIn) {
       await page.goto(`${BASE}/login`, { waitUntil: 'domcontentloaded' })
       await hydrated(page)
-      await page.locator('input[type="email"]').fill('superadmin@antrean.local')
-      await page.locator('input[type="password"]').fill('password123')
-      await page.locator('button[type="submit"]').click()
+      await masukLewatUi(page, BASE, 'superadmin@antrean.local')
       await page.waitForURL(/\/admin\//, { timeout: 30_000 })
     }
 
@@ -354,9 +384,7 @@ async function main() {
     operatorPage.setDefaultNavigationTimeout(60_000)
     await operatorPage.goto(`${BASE}/login`, { waitUntil: 'domcontentloaded' })
     await hydrated(operatorPage)
-    await operatorPage.locator('input[type="email"]').fill(operatorEmail)
-    await operatorPage.locator('input[type="password"]').fill('password123')
-    await operatorPage.locator('button[type="submit"]').click()
+    await masukLewatUi(operatorPage, BASE, operatorEmail)
     const operatorReady = await operatorPage.waitForURL(/\/operator/, { timeout: 90_000 })
       .then(() => true)
       .catch(() => false)

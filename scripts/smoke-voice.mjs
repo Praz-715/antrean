@@ -25,6 +25,8 @@
  */
 import { chromium } from 'playwright'
 
+import { headerCaptcha } from './captcha.mjs'
+
 /** Alamat server yang diuji; timpa dengan SMOKE_BASE untuk menguji hasil build. */
 const BASE = process.env.SMOKE_BASE || 'http://localhost:3000'
 const EVENT_ID = process.env.EVENT_ID || '01M25DM9RHXZJ1QNPTD96J1TYB'
@@ -46,7 +48,7 @@ let cookie = ''
 async function api(method, path, body) {
   const res = await fetch(BASE + path, {
     method,
-    headers: { 'Content-Type': 'application/json', 'Origin': BASE, ...(cookie ? { Cookie: cookie } : {}) },
+    headers: { ...(await headerCaptcha(BASE, path)), 'Content-Type': 'application/json', 'Origin': BASE, ...(cookie ? { Cookie: cookie } : {}) },
     ...(body ? { body: JSON.stringify(body) } : {}),
   })
   for (const c of res.headers.getSetCookie?.() ?? []) {

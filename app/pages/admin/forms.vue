@@ -25,6 +25,7 @@ interface FormRow {
   name: string
   description: string | null
   isActive: boolean
+  requireCaptcha: boolean
   dataSourceId: string | null
   fields: FieldRow[]
 }
@@ -147,6 +148,27 @@ async function attachDataSource(dataSourceId: string | null) {
     dataSourceId ? 'Sumber data disambungkan' : 'Sumber data dilepas',
   )
   savingDataSource.value = false
+  await load()
+}
+
+/**
+ * Captcha geser pada halaman publik (§36).
+ *
+ * Disimpan pada formulir, bukan pada halaman publiknya: yang dilindungi adalah
+ * pengiriman isian, dan satu event bisa memakai formulir berbeda untuk keperluan
+ * berbeda — pendaftaran umum boleh dijaga captcha, formulir internal tidak perlu.
+ */
+const savingCaptcha = ref(false)
+
+async function setRequireCaptcha(requireCaptcha: boolean) {
+  if (!activeFormId.value) return
+  savingCaptcha.value = true
+  await call(
+    `/api/admin/forms/${activeFormId.value}`,
+    { method: 'PATCH', body: { requireCaptcha } },
+    requireCaptcha ? 'Verifikasi geser dinyalakan' : 'Verifikasi geser dimatikan',
+  )
+  savingCaptcha.value = false
   await load()
 }
 
@@ -362,6 +384,33 @@ function iconOf(type: string) {
             ...dataSources.map(d => ({ label: d.isActive ? d.name : `${d.name} (nonaktif)`, value: d.id })),
           ]"
           @update:model-value="(v: string) => attachDataSource(nullableValue(v))"
+        />
+      </div>
+
+      <!-- Verifikasi anti-bot pada halaman publik (§36) -->
+      <div
+        v-if="activeForm"
+        class="mb-4 flex flex-wrap items-center gap-3 rounded-xl border border-slate-200 bg-white p-4 dark:border-slate-800 dark:bg-slate-900"
+      >
+        <UIcon name="i-lucide-shield-check" class="size-5 text-slate-400" />
+        <div class="min-w-48 flex-1">
+          <p class="text-sm font-medium">
+            Verifikasi geser sebelum ambil nomor
+          </p>
+          <p class="text-xs text-slate-500">
+            Pengunjung menggeser potongan gambar sampai pas setelah menekan "Ambil Nomor Antrean".
+            Menahan pengambilan nomor secara borongan tanpa perlu layanan dari luar.
+            <template v-if="!activeForm.isActive">
+              Baru berlaku setelah formulir ini diaktifkan.
+            </template>
+          </p>
+        </div>
+
+        <USwitch
+          :model-value="activeForm.requireCaptcha"
+          :disabled="!can(PERMISSIONS.FORM_MANAGE) || savingCaptcha"
+          :label="activeForm.requireCaptcha ? 'Aktif' : 'Nonaktif'"
+          @update:model-value="(v: boolean) => setRequireCaptcha(v)"
         />
       </div>
 
