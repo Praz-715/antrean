@@ -4,6 +4,7 @@ import { ok } from '../../../utils/response'
 import { requireOrganization, requirePermission } from '../../../utils/context'
 import { publishService } from '../../../services/publish.service'
 import { idSchema } from '../../../../shared/schemas/common'
+import { publicPageThemeSchema } from '../../../../shared/schemas/public-page'
 import { PERMISSIONS } from '../../../../shared/constants/permissions'
 
 const bodySchema = z.object({
@@ -25,7 +26,11 @@ const bodySchema = z.object({
   allowedQueueTypeIds: z.array(idSchema).default([]),
   maxPerIpPerDay: z.number().int().min(0).max(1000).default(5),
   requireCaptcha: z.boolean().default(false),
-  theme: z.record(z.string(), z.unknown()).optional(),
+  /**
+   * Tampilan halaman — divalidasi skema bersama, bukan JSON bebas seperti dulu.
+   * Kunci yang tidak dikenal dibuang, kunci yang hilang memakai nilai bawaannya.
+   */
+  theme: publicPageThemeSchema.optional(),
 })
 
 export default defineApiHandler(async (event) => {

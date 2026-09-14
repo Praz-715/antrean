@@ -4,6 +4,7 @@ import { ok } from '../../../utils/response'
 import { requireOrganization, requirePermission } from '../../../utils/context'
 import { publishService } from '../../../services/publish.service'
 import { idSchema } from '../../../../shared/schemas/common'
+import { publicPageThemeSchema } from '../../../../shared/schemas/public-page'
 import { PERMISSIONS } from '../../../../shared/constants/permissions'
 
 const bodySchema = z.object({
@@ -16,7 +17,11 @@ const bodySchema = z.object({
   // Disimpan & ditampilkan sebagai TEKS BIASA, bukan HTML — tidak ada sanitizer di
   // sistem ini, jadi jangan pernah merender markup dari input admin.
   infoHtml: z.string().max(5000).optional().nullable(),
-  theme: z.record(z.string(), z.unknown()).optional(),
+  /**
+   * Tampilan halaman — divalidasi skema bersama, bukan JSON bebas seperti dulu.
+   * Kunci yang tidak dikenal dibuang, kunci yang hilang memakai nilai bawaannya.
+   */
+  theme: publicPageThemeSchema.optional(),
   allowedQueueTypeIds: z.array(idSchema).optional(),
   maxPerIpPerDay: z.number().int().min(0).max(1000).optional(),
   requireCaptcha: z.boolean().optional(),

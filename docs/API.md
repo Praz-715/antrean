@@ -415,6 +415,7 @@ Reset kata sandi mencabut seluruh sesi aktif pengguna tersebut.
 | Endpoint | Permission |
 |---|---|
 | `GET/POST /api/admin/public-pages` | `public_page.view` / `public_page.manage` |
+| `GET /api/admin/public-pages/{id}` | `public_page.view` — satu halaman, dipakai builder |
 | `PATCH/DELETE /api/admin/public-pages/{id}` | `public_page.manage` |
 | `POST /api/admin/public-pages/{id}/publish` | `public_page.publish` |
 | `POST /api/admin/public-pages/{id}/qr` | `public_page.manage` |
@@ -429,6 +430,44 @@ GET /api/admin/public-pages/{id}/qr?format=svg
 
 `POST …/qr` dengan `{ "rotateCode": true }` mengganti kode publikasi sekaligus — tautan lama mati,
 versi QR bertambah, dan versi lama tetap tersimpan untuk audit.
+
+#### Tampilan halaman (`theme`)
+
+Seluruh setelan tampilan disimpan pada satu kolom JSON `theme` dan divalidasi
+`publicPageThemeSchema` (`shared/schemas/public-page.ts`) — bukan JSON bebas. Kunci yang tidak
+dikenal dibuang, kunci yang hilang memakai nilai bawaannya, jadi halaman lama yang hanya
+menyimpan `primaryColor`/`secondaryColor`/`footerText` tetap sah.
+
+```jsonc
+{
+  "primaryColor": "#1b5cf5",
+  "secondaryColor": "#0f172a",
+  "accentColor": "#337dff",        // opsional; kosong = ikut primaryColor
+  "fontFamily": "",
+  "footerText": "",
+  "hero": {
+    "enabled": true,
+    "title": "", "subtitle": "", "description": "",   // kosong = ikut judul/subjudul halaman
+    "align": "center",             // left | center | right
+    "height": "medium",            // compact | medium | large
+    "overlay": 72,                 // kepekatan lapisan di atas gambar latar, persen
+    "ctaEnabled": true, "ctaText": "Ambil Nomor Antrean",
+    "showDate": true, "showTime": true, "showLocation": false, "location": ""
+  },
+  "services": {
+    "title": "Pilih layanan", "subtitle": "",
+    "columns": 3,                  // 2–4, hanya berlaku di layar lebar
+    "cardStyle": "elevated",       // elevated | outlined | soft
+    "showIcon": true, "showWaiting": true, "showEstimate": true,
+    "ctaStyle": "button"           // button | link
+  },
+  "info": { "title": "Informasi layanan", "style": "cards" },  // cards | plain
+  "footer": { "showLogo": true, "showOrganization": true, "showPoweredBy": true }
+}
+```
+
+`GET /api/public/{publishCode}` mengembalikan `page.theme` yang SUDAH lengkap dengan nilai
+bawaannya, sehingga perender di klien tidak perlu menambal sendiri.
 
 ### Formulir Dinamis
 

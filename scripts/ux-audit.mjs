@@ -365,7 +365,12 @@ async function main() {
     await visitor.goto(`${BASE}/p/${publicPage.publishCode}`, { waitUntil: 'domcontentloaded' })
     await hydrated(visitor)
     await waitFor(async () => (await visitor.getByText(serviceName).count()) > 0)
-    await visitor.getByText(serviceName, { exact: false }).first().click()
+    /**
+     * Nama layanan kini judul di dalam kartu, bukan tombol — yang ditekan adalah
+     * tombol "Ambil Nomor" pada kartu itu.
+     */
+    await visitor.locator('article').filter({ hasText: serviceName }).first()
+      .getByRole('button').first().click()
     const gotTicket = await waitFor(async () => /\/queue\//.test(visitor.url()), 20_000)
     // Dipakai lagi pada bagian tema: halaman tiket harus ikut punya sakelar tema.
     const ticketUrl = gotTicket ? visitor.url() : ''

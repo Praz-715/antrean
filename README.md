@@ -257,6 +257,15 @@ tampilannya berubah terang hanya bila pengguna memang memilih tema terang.
   menampilkannya sebagai bilah pemilih layanan. Loket tanpa layanan tidak bisa ditempati, dan
   layanan loket tidak bisa dikosongkan selama masih ada operator di sana. Konsekuensinya skrip uji
   membuat operator + loketnya sendiri — bukan memakai akun operator demo bersama.
+- **Halaman publik & builder-nya (§48).** Tampilan halaman pengunjung disusun di
+  `/admin/public-pages/{id}`: panel setelan di atas, pratinjau halaman sungguhan di bawah.
+  Pratinjaunya bukan tiruan — yang digambar komponen yang sama persis dengan yang dilihat
+  pengunjung (`app/components/public/PageRenderer.vue`), hanya dengan prop `preview` yang
+  mematikan tombolnya. Perendernya memakai kueri wadah (`@container`), bukan lebar jendela,
+  sehingga pratinjau ponsel benar-benar memakai tata letak ponsel; halaman dirender pada lebar
+  perangkat aslinya lalu diperkecil dengan `transform: scale`. Seluruh setelan tampilan hidup
+  di kolom `public_pages.theme` yang sudah ada, divalidasi skema bersama — tidak ada kolom atau
+  tabel baru, dan halaman yang sudah terbit tetap tampil apa adanya.
 - **Captcha geser (§36).** Halaman masuk selalu, dan pengambilan nomor antrean bila dinyalakan
   pada formulir aktif di `/admin/forms`. Dijalankan sendiri oleh server ini — tidak perlu kunci
   dari layanan luar seperti Turnstile. Kedua gambarnya (latar berlubang dan potongannya) dibuat

@@ -205,7 +205,9 @@ async function main() {
     const visitor = await context.newPage()
     await visitor.goto(`${BASE}/p/${fx.publishCode}`, { waitUntil: 'domcontentloaded' })
     await waitHydrated(visitor)
-    await visitor.locator('button').filter({ hasText: fx.queueType.name }).first().click()
+    // Kartu layanan: yang diklik tombol "Ambil Nomor" di dalam kartunya
+    await visitor.locator('article').filter({ hasText: fx.queueType.name }).first()
+      .getByRole('button').first().click()
     await visitor.locator('form').waitFor({ timeout: 15_000 })
 
     const formText = await visitor.locator('form').innerText()

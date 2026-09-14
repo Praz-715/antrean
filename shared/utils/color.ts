@@ -34,6 +34,32 @@ export function contrastRatio(a: number, b: number) {
   return (Math.max(a, b) + 0.05) / (Math.min(a, b) + 0.05)
 }
 
+/**
+ * Warna teks yang terbaca DI ATAS warna pilihan admin.
+ *
+ * Berbeda tujuan dari `readableColor`, yang menerangkan warna agar terbaca sebagai
+ * teks di atas latar gelap. Yang ini menjawab pertanyaan sebaliknya: hero dan tombol
+ * halaman publik memakai warna utama sebagai LATAR, jadi teks di atasnya harus ikut
+ * berubah — putih di atas biru tua, gelap di atas kuning muda. Tanpa ini, admin yang
+ * memilih warna terang mendapat tombol yang tulisannya nyaris tak terlihat.
+ */
+export function onColor(hex: string): string {
+  const rgb = hexToRgb(hex)
+  if (!rgb) return '#ffffff'
+
+  const lum = relativeLuminance(rgb)
+  const putih = contrastRatio(lum, 1)
+  const gelap = contrastRatio(lum, relativeLuminance([15, 23, 42])) // slate-900
+  return putih >= gelap ? '#ffffff' : '#0f172a'
+}
+
+/** `#1b5cf5` + 0.12 → `rgb(27 92 245 / 0.12)`, aman dipakai di CSS mana pun. */
+export function withAlpha(hex: string, alpha: number): string {
+  const rgb = hexToRgb(hex)
+  if (!rgb) return hex
+  return `rgb(${rgb[0]} ${rgb[1]} ${rgb[2]} / ${alpha})`
+}
+
 function rgbToHex(rgb: [number, number, number]) {
   return '#' + rgb.map(v => Math.round(Math.min(255, Math.max(0, v))).toString(16).padStart(2, '0')).join('')
 }

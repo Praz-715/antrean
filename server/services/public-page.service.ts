@@ -1,7 +1,7 @@
 import { prisma } from '../utils/prisma'
 import { errors } from '../utils/response'
 import { ERROR_CODES } from '../../shared/constants/errors'
-import { resolveServiceDate } from '../utils/datetime'
+import { formatServiceDate, resolveServiceDate } from '../utils/datetime'
 import { buildFormValidator, extractVisitorCore } from '../utils/dynamic-form'
 import { verifyCaptcha } from '../utils/captcha'
 import { consumeTicket } from '../utils/slider-captcha'
@@ -10,6 +10,7 @@ import { queueService } from './queue.service'
 import { settingService } from './setting.service'
 import { datasourceService } from './datasource.service'
 import { SETTING_KEYS } from '../../shared/constants/settings'
+import { parsePublicPageTheme } from '../../shared/schemas/public-page'
 
 export const publicPageService = {
   /** Konfigurasi halaman publik + layanan yang tersedia + status buka (§4). */
@@ -26,6 +27,9 @@ export const publicPageService = {
             branding: true,
             settings: true,
             organizationId: true,
+            // Tanggal event dipakai hero halaman publik (§48) — "12–16 September 2026".
+            startDate: true,
+            endDate: true,
             organization: { select: { name: true, logoUrl: true } },
           },
         },
@@ -85,7 +89,14 @@ export const publicPageService = {
         description: page.description,
         logoUrl: page.logoUrl,
         backgroundUrl: page.backgroundUrl,
-        theme: page.theme,
+        /**
+         * Tema dikirim sudah lengkap dengan nilai bawaannya.
+         *
+         * Halaman publik dan pratinjau builder memakai komponen yang sama; bila
+         * masing-masing menambal sendiri kunci yang kosong, keduanya pelan-pelan
+         * berbeda. Normalisasinya cukup sekali, di sini.
+         */
+        theme: parsePublicPageTheme(page.theme),
         infoHtml: page.infoHtml,
         requireCaptcha: page.requireCaptcha,
       },
@@ -96,6 +107,8 @@ export const publicPageService = {
         status: page.event.status,
         timezone: page.event.timezone,
         branding: page.event.branding,
+        startDate: page.event.startDate ? formatServiceDate(page.event.startDate) : null,
+        endDate: page.event.endDate ? formatServiceDate(page.event.endDate) : null,
       },
       openState,
       // Fitur yang boleh dipakai halaman ini — halaman publik merender sesuai ini (§49).
