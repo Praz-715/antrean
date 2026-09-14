@@ -62,6 +62,7 @@ semua respons memakai amplop yang sama.
 | `AUTOFILL_NOT_FOUND` | 400 | Data yang dicari tidak ditemukan di sistem eksternal |
 | `CAPTCHA_REQUIRED` | 400 | Verifikasi anti-bot belum diselesaikan |
 | `CAPTCHA_INVALID` | 400 | Tiket captcha salah, kedaluwarsa, atau sudah dipakai |
+| `OUTSIDE_GEOFENCE` | 400 | Pengunjung di luar radius pagar lokasi halaman |
 
 ---
 
@@ -184,6 +185,39 @@ ke `none` — pengunjung tidak pernah dialihkan ke halaman yang sengaja ditutup.
 > bisa diganti kapan saja — maupun slug halaman (`layanan-ahu-kuningan-city`) yang tetap. Keduanya
 > membuka halaman yang sama dan berlaku pada seluruh endpoint publik di bawah ini. Bila sebuah slug
 > kebetulan sama dengan kode publikasi halaman lain, yang menang kode publikasinya.
+
+#### Pagar lokasi
+
+Halaman yang menyalakan `geofenceEnabled` hanya terbuka bagi pengunjung dalam radius
+`geofenceRadiusM` meter dari (`latitude`, `longitude`). Koordinat pengunjung dikirim sebagai
+`?lat=&lng=` (GET) atau field `lat`/`lng` (POST) dan diperiksa di server pada **setiap**
+endpoint publik — konfigurasi halaman, papan status, isi otomatis, dan pengambilan nomor.
+
+`GET /api/public/{publishCode}` membalas dengan bentuk yang lebih pendek selama pengunjung
+belum terbukti berada di dalam jangkauan:
+
+```jsonc
+{
+  "access": "geofenced",          // "granted" bila boleh masuk
+  "geofence": {
+    "required": true,
+    "inside": false,
+    "radiusM": 1000,
+    "latitude": -6.175392,        // titik pusat — supaya pengunjung tahu tujuannya
+    "longitude": 106.827153,
+    "distanceM": 119412           // null selama lokasinya belum diberikan
+  },
+  "page": { "title": "…", "subtitle": "…", "logoUrl": null, "theme": { } },
+  "organization": { "name": "…", "logoUrl": null }
+}
+```
+
+Daftar layanan, formulir, dan status buka TIDAK ikut dikirim pada bentuk ini. Endpoint lain
+menolak dengan `400` `OUTSIDE_GEOFENCE`.
+
+> Pagar ini menahan, bukan mengunci: koordinat berasal dari peramban pengunjung dan bisa
+> dipalsukan. Pagar yang menyala tanpa titik koordinat diperlakukan sebagai mati, dan API admin
+> menolak menyalakannya sebelum titiknya diisi.
 
 ### `GET /api/public/{publishCode}`
 
@@ -443,6 +477,9 @@ Reset kata sandi mencabut seluruh sesi aktif pengguna tersebut.
 
 Respons halaman publik membawa dua alamat: `url` (kode publikasi) dan `slugUrl` (`null` bila
 slugnya belum diisi).
+
+Pagar lokasi diatur lewat `geofenceEnabled`, `latitude`, `longitude` (–90..90 / –180..180), dan
+`geofenceRadiusM` (50–50.000 m, bawaan 1.000).
 | `PATCH/DELETE /api/admin/public-pages/{id}` | `public_page.manage` |
 | `POST /api/admin/public-pages/{id}/publish` | `public_page.publish` |
 | `POST /api/admin/public-pages/{id}/qr` | `public_page.manage` |

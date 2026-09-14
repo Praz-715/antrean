@@ -30,6 +30,14 @@ const bodySchema = z.object({
    * Tampilan halaman — divalidasi skema bersama, bukan JSON bebas seperti dulu.
    * Kunci yang tidak dikenal dibuang, kunci yang hilang memakai nilai bawaannya.
    */
+  /**
+   * Pagar lokasi (§36). Radius dalam meter; 50 m sudah sesempit ketelitian GPS
+   * ponsel, dan di atas 50 km pagarnya tidak lagi berarti apa-apa.
+   */
+  geofenceEnabled: z.boolean().optional(),
+  latitude: z.number().min(-90).max(90).nullable().optional(),
+  longitude: z.number().min(-180).max(180).nullable().optional(),
+  geofenceRadiusM: z.number().int().min(50).max(50_000).optional(),
   theme: publicPageThemeSchema.optional(),
 })
 

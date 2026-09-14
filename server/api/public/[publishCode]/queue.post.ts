@@ -8,6 +8,7 @@ import { emitQueueEvent } from '../../../realtime/emitters'
 import { SOCKET_EVENTS } from '../../../../shared/constants/socket'
 import { formatServiceDate } from '../../../utils/datetime'
 import { idSchema } from '../../../../shared/schemas/common'
+import { coordsOf, visitorCoordsSchema } from '../../../utils/geofence'
 
 const bodySchema = z.object({
   queueTypeId: idSchema,
@@ -15,7 +16,7 @@ const bodySchema = z.object({
   captchaToken: z.string().max(4000).optional().nullable(),
   /** Tiket captcha geser; diminta bila formulir aktif mewajibkannya. */
   sliderToken: z.string().max(200).optional().nullable(),
-})
+}).extend(visitorCoordsSchema.shape)
 
 /** Pengunjung mengambil nomor antrean. */
 export default defineApiHandler(async (event) => {
@@ -31,6 +32,7 @@ export default defineApiHandler(async (event) => {
     values: body.values,
     captchaToken: body.captchaToken,
     sliderToken: body.sliderToken,
+    visitor: coordsOf(body),
     ipAddress: clientIp(event),
     userAgent: getRequestHeader(event, 'user-agent') ?? null,
   })

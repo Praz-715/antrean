@@ -93,5 +93,10 @@ export interface PublicPageDraft {
   allowedQueueTypeIds: string[]
   maxPerIpPerDay: number
   requireCaptcha: boolean
+  /** Pagar lokasi (§36) — aturan akses, bukan tampilan, jadi di luar `theme`. */
+  geofenceEnabled: boolean
+  latitude: number | null
+  longitude: number | null
+  geofenceRadiusM: number
   theme: PublicPageTheme
 }

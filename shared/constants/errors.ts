@@ -29,6 +29,8 @@ export const ERROR_CODES = {
   DAILY_LIMIT_REACHED: 'DAILY_LIMIT_REACHED',
   CAPTCHA_REQUIRED: 'CAPTCHA_REQUIRED',
   CAPTCHA_INVALID: 'CAPTCHA_INVALID',
+  /** Pengunjung berada di luar radius pagar lokasi halaman publik (§36). */
+  OUTSIDE_GEOFENCE: 'OUTSIDE_GEOFENCE',
 
   // queue
   QUEUE_NOT_FOUND: 'QUEUE_NOT_FOUND',

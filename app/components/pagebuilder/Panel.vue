@@ -3,6 +3,7 @@ import type { PublicPageDraft } from '#shared/types/public-page'
 import { BRANDING_PRESETS, matchPreset } from '#shared/constants/public-page'
 import { accentOf } from '#shared/schemas/public-page'
 import { SELECT_NONE, nullableValue } from '#shared/constants/ui'
+import { formatDistance, mapsUrl, parseCoordinates } from '#shared/utils/geo'
 
 /**
  * Panel setelan builder halaman publik.
@@ -45,6 +46,7 @@ const BAGIAN = [
   { key: 'layanan', label: 'Layanan', icon: 'i-lucide-layout-grid' },
   { key: 'informasi', label: 'Informasi', icon: 'i-lucide-info' },
   { key: 'antrean', label: 'Antrean', icon: 'i-lucide-ticket' },
+  { key: 'lokasi', label: 'Lokasi', icon: 'i-lucide-map-pin' },
   { key: 'footer', label: 'Footer', icon: 'i-lucide-panel-bottom' },
   { key: 'lanjutan', label: 'Lanjutan', icon: 'i-lucide-settings-2' },
 ] as const
@@ -118,6 +120,69 @@ const typeOptions = computed(() =>
 
 /** Slug di kotak isian sudah berbeda dari yang tersimpan — tautannya belum berpindah. */
 const slugBerubah = computed(() => draft.value.slug.trim() !== props.savedSlug)
+
+/* ---------------- pagar lokasi (§36) ---------------- */
+
+const RADIUS_CEPAT = [200, 500, 1000, 5000]
+
+/** Apa yang diketik/ditempel admin; koordinatnya diurai dari sini. */
+const titikTeks = ref('')
+const titikGalat = ref('')
+const mengambilLokasi = ref(false)
+
+const titikTersimpan = computed(() =>
+  draft.value.latitude !== null && draft.value.longitude !== null
+    ? { latitude: draft.value.latitude, longitude: draft.value.longitude }
+    : null)
+
+/**
+ * Admin boleh menempel apa saja yang ada di tangannya — tautan Google Maps atau
+ * sepasang angka. Menyuruhnya menggali koordinat sendiri dari URL panjang adalah
+ * cara tercepat mendapatkan titik yang meleset.
+ */
+function terapkanTitik() {
+  const teks = titikTeks.value.trim()
+  if (!teks) { titikGalat.value = ''; return }
+
+  const titik = parseCoordinates(teks)
+  if (!titik) {
+    titikGalat.value = 'Tidak menemukan koordinat di teks itu. Tempel tautan Google Maps, atau tulis -6.2, 106.8.'
+    return
+  }
+
+  titikGalat.value = ''
+  draft.value.latitude = titik.latitude
+  draft.value.longitude = titik.longitude
+  titikTeks.value = ''
+}
+
+function ambilLokasiSaya() {
+  if (!navigator.geolocation) {
+    titikGalat.value = 'Peramban ini tidak bisa membaca lokasi.'
+    return
+  }
+  mengambilLokasi.value = true
+  navigator.geolocation.getCurrentPosition(
+    (pos) => {
+      mengambilLokasi.value = false
+      titikGalat.value = ''
+      draft.value.latitude = pos.coords.latitude
+      draft.value.longitude = pos.coords.longitude
+    },
+    () => {
+      mengambilLokasi.value = false
+      titikGalat.value = 'Lokasi tidak terbaca. Pastikan izin lokasi peramban menyala.'
+    },
+    { enableHighAccuracy: true, timeout: 15_000 },
+  )
+}
+
+/** Mematikan pagarnya sekalian: pagar tanpa titik ditolak server. */
+function hapusTitik() {
+  draft.value.latitude = null
+  draft.value.longitude = null
+  draft.value.geofenceEnabled = false
+}
 </script>
 
 <template>
@@ -523,7 +588,128 @@ const slugBerubah = computed(() => draft.value.slug.trim() !== props.savedSlug)
         </div>
       </div>
 
-      <!-- 7. FOOTER -->
+      <!-- 7. LOKASI -->
+      <div v-else-if="aktif === 'lokasi'" class="grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
+        <div class="sm:col-span-2 xl:col-span-3">
+          <USwitch
+            v-model="draft.geofenceEnabled"
+            :disabled="!titikTersimpan"
+            label="Batasi akses berdasarkan lokasi"
+          />
+          <p class="mt-1 text-xs text-slate-500">
+            <template v-if="!titikTersimpan">
+              Tentukan titik lokasi dulu di bawah, baru sakelar ini bisa dinyalakan.
+            </template>
+            <template v-else-if="draft.geofenceEnabled">
+              Halaman hanya terbuka bagi pengunjung dalam jarak
+              {{ formatDistance(draft.geofenceRadiusM) }} dari titik ini. Pengunjung diminta
+              membagikan lokasinya, dan jaraknya diperiksa ulang di server.
+            </template>
+            <template v-else>
+              Halaman terbuka untuk siapa saja yang punya tautannya.
+            </template>
+          </p>
+        </div>
+
+        <UFormField
+          label="Titik lokasi"
+          class="sm:col-span-2"
+          :error="titikGalat || undefined"
+          help="Tempel tautan Google Maps, atau tulis koordinat seperti -6.2088, 106.8456."
+        >
+          <div class="flex flex-wrap gap-2">
+            <UInput
+              v-model="titikTeks"
+              class="min-w-48 flex-1"
+              placeholder="Tautan Google Maps atau -6.2088, 106.8456"
+              @keydown.enter.prevent="terapkanTitik"
+              @blur="terapkanTitik"
+            />
+            <UButton
+              icon="i-lucide-check"
+              variant="outline"
+              color="neutral"
+              label="Pakai"
+              :disabled="!titikTeks.trim()"
+              @click="terapkanTitik"
+            />
+            <UButton
+              icon="i-lucide-crosshair"
+              variant="outline"
+              color="neutral"
+              label="Lokasi saya"
+              :loading="mengambilLokasi"
+              @click="ambilLokasiSaya"
+            />
+          </div>
+        </UFormField>
+
+        <UFormField label="Radius" :hint="formatDistance(draft.geofenceRadiusM)">
+          <UInputNumber v-model="draft.geofenceRadiusM" :min="50" :max="50000" :step="50" class="w-full" />
+          <template #help>
+            <div class="mt-1 flex flex-wrap gap-1">
+              <button
+                v-for="r in RADIUS_CEPAT"
+                :key="r"
+                type="button"
+                class="rounded-md border px-2 py-0.5 text-xs transition-colors"
+                :class="draft.geofenceRadiusM === r
+                  ? 'border-brand-500 bg-brand-50 text-brand-700 dark:bg-brand-950/60 dark:text-brand-300'
+                  : 'border-slate-200 text-slate-500 hover:border-slate-300 dark:border-slate-700'"
+                @click="draft.geofenceRadiusM = r"
+              >
+                {{ formatDistance(r) }}
+              </button>
+            </div>
+          </template>
+        </UFormField>
+
+        <div class="sm:col-span-2 xl:col-span-3">
+          <div
+            v-if="titikTersimpan"
+            class="flex flex-wrap items-center gap-3 rounded-lg bg-slate-50 p-3 dark:bg-slate-800/50"
+          >
+            <UIcon name="i-lucide-map-pin" class="size-4 shrink-0 text-slate-400" />
+            <code class="text-xs">{{ titikTersimpan.latitude.toFixed(6) }}, {{ titikTersimpan.longitude.toFixed(6) }}</code>
+            <a
+              :href="mapsUrl(titikTersimpan)"
+              target="_blank"
+              rel="noopener noreferrer"
+              class="text-xs font-semibold text-primary underline-offset-4 hover:underline"
+            >
+              Periksa di peta
+            </a>
+            <UButton
+              class="ml-auto"
+              size="xs"
+              variant="ghost"
+              color="error"
+              icon="i-lucide-x"
+              label="Hapus titik"
+              @click="hapusTitik"
+            />
+          </div>
+          <div
+            v-else
+            class="rounded-lg border border-dashed border-slate-300 p-3 text-xs text-slate-500 dark:border-slate-700"
+          >
+            Belum ada titik lokasi.
+          </div>
+        </div>
+
+        <div class="rounded-lg border border-amber-200 bg-amber-50 p-3 text-xs text-amber-900 sm:col-span-2 xl:col-span-3 dark:border-amber-900/60 dark:bg-amber-950/40 dark:text-amber-200">
+          <p class="font-medium">
+            Pagar lokasi menahan, bukan mengunci
+          </p>
+          <p class="mt-1">
+            Koordinat dikirim oleh peramban pengunjung dan bisa dipalsukan dengan aplikasi GPS palsu.
+            Ini menaikkan usaha yang dibutuhkan — sekelas captcha — bukan bukti keberadaan seseorang.
+            Peramban juga hanya mengizinkan pembacaan lokasi lewat HTTPS.
+          </p>
+        </div>
+      </div>
+
+      <!-- 8. FOOTER -->
       <div v-else-if="aktif === 'footer'" class="grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
         <UFormField label="Teks footer" hint="opsional">
           <UInput v-model="draft.theme.footerText" class="w-full" maxlength="190" placeholder="Dikelola oleh Bagian Pelayanan" />
@@ -536,7 +722,7 @@ const slugBerubah = computed(() => draft.value.slug.trim() !== props.savedSlug)
         </div>
       </div>
 
-      <!-- 8. LANJUTAN -->
+      <!-- 9. LANJUTAN -->
       <div v-else class="grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
         <div class="sm:col-span-2">
           <p class="mb-1 text-xs font-medium text-slate-500">

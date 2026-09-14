@@ -722,6 +722,15 @@ model PublicPage {
   allowedQueueTypeIds Json?     @map("allowed_queue_type_ids")
   requireCaptcha      Boolean   @default(false) @map("require_captcha")
   maxPerIpPerDay      Int       @default(5) @map("max_per_ip_per_day")
+  /**
+   * Pagar lokasi (§36): halaman hanya terbuka bila pengunjung berada dalam radius
+   * ini dari titik yang ditentukan. Kolom tersendiri, bukan bagian `theme`, karena
+   * ini aturan AKSES — bukan tampilan — dan diperiksa di server pada tiap permintaan.
+   */
+  geofenceEnabled     Boolean   @default(false) @map("geofence_enabled")
+  latitude            Float?    @db.Double
+  longitude           Float?    @db.Double
+  geofenceRadiusM     Int       @default(1000) @map("geofence_radius_m")
   createdAt           DateTime  @default(now()) @map("created_at") @db.DateTime(3)
   updatedAt           DateTime  @updatedAt @map("updated_at") @db.DateTime(3)
   deletedAt           DateTime? @map("deleted_at") @db.DateTime(3)

@@ -12,10 +12,18 @@ import { datasourceService } from './datasource.service'
 import { SETTING_KEYS } from '../../shared/constants/settings'
 import { parsePublicPageTheme } from '../../shared/schemas/public-page'
 import { byCodeOrSlug, pickCanonical } from '../utils/public-page-lookup'
+import { assertInsideGeofence, evaluateGeofence } from '../utils/geofence'
+import type { Coordinates } from '../../shared/utils/geo'
 
 export const publicPageService = {
-  /** Konfigurasi halaman publik + layanan yang tersedia + status buka (§4). */
-  async getByPublishCode(publishCode: string) {
+  /**
+   * Konfigurasi halaman publik + layanan yang tersedia + status buka (§4).
+   *
+   * `visitor` hanya perlu diisi untuk halaman yang dipagari lokasi; halaman lain
+   * mengabaikannya. Pemeriksaannya ada di sini, bukan di antarmuka, karena
+   * menyembunyikan tombol tidak menghalangi siapa pun memanggil API-nya langsung.
+   */
+  async getByPublishCode(publishCode: string, visitor: Coordinates | null = null) {
     const kandidat = await prisma.publicPage.findMany({
       where: { deletedAt: null, ...byCodeOrSlug(publishCode) },
       take: 2,
@@ -42,6 +50,29 @@ export const publicPageService = {
     if (!page) throw errors.notFound('Halaman antrean tidak ditemukan')
     if (!page.isPublished) {
       throw errors.badRequest(ERROR_CODES.PAGE_NOT_PUBLISHED, 'Halaman antrean ini sedang tidak aktif')
+    }
+
+    /**
+     * Pengunjung di luar pagar tidak menerima isi halaman sama sekali — bukan isi
+     * lengkap yang tombolnya dimatikan. Yang dikirim hanya secukupnya untuk
+     * menggambar layar penolakan dengan identitas yang benar: judul, logo, warna,
+     * dan titik lokasinya supaya ia tahu harus ke mana.
+     */
+    const geofence = evaluateGeofence(page, visitor)
+    if (!geofence.inside) {
+      return {
+        access: 'geofenced' as const,
+        geofence,
+        page: {
+          publishCode: page.publishCode,
+          title: page.title,
+          subtitle: page.subtitle,
+          logoUrl: page.logoUrl,
+          backgroundUrl: page.backgroundUrl,
+          theme: parsePublicPageTheme(page.theme),
+        },
+        organization: page.event.organization,
+      }
     }
 
     const allowed = Array.isArray(page.allowedQueueTypeIds)
@@ -84,6 +115,8 @@ export const publicPageService = {
     })
 
     return {
+      access: 'granted' as const,
+      geofence,
       page: {
         publishCode: page.publishCode,
         slug: page.slug,
@@ -161,16 +194,26 @@ export const publicPageService = {
    * Daftar field yang boleh diisi diambil dari definisi formulir aktif, bukan dari
    * pemetaan — sehingga respons pihak ketiga tidak bisa menitipkan kunci lain.
    */
-  async autofill(publishCode: string, lookup: string) {
+  async autofill(publishCode: string, lookup: string, visitor: Coordinates | null = null) {
     const page = pickCanonical(
       await prisma.publicPage.findMany({
         where: { deletedAt: null, isPublished: true, ...byCodeOrSlug(publishCode) },
         take: 2,
-        select: { publishCode: true, eventId: true },
+        select: {
+          publishCode: true,
+          eventId: true,
+          geofenceEnabled: true,
+          latitude: true,
+          longitude: true,
+          geofenceRadiusM: true,
+        },
       }),
       publishCode,
     )
     if (!page) throw errors.notFound('Halaman antrean tidak ditemukan')
+
+    // Isi otomatis menarik data dari sistem luar; jangan dibuka dari luar pagar.
+    assertInsideGeofence(evaluateGeofence(page, visitor))
 
     const form = await prisma.formDefinition.findFirst({
       where: { eventId: page.eventId, isActive: true },
@@ -199,6 +242,8 @@ export const publicPageService = {
     values: Record<string, unknown>
     captchaToken?: string | null
     sliderToken?: string | null
+    /** Koordinat pengunjung; hanya dipakai halaman yang dipagari lokasi. */
+    visitor?: Coordinates | null
     ipAddress?: string | null
     userAgent?: string | null
   }) {
@@ -213,6 +258,10 @@ export const publicPageService = {
         allowedQueueTypeIds: true,
         maxPerIpPerDay: true,
         requireCaptcha: true,
+        geofenceEnabled: true,
+        latitude: true,
+        longitude: true,
+        geofenceRadiusM: true,
         event: { select: { organizationId: true, settings: true, timezone: true } },
       },
     })
@@ -221,6 +270,12 @@ export const publicPageService = {
     if (!page.isPublished) {
       throw errors.badRequest(ERROR_CODES.PAGE_NOT_PUBLISHED, 'Halaman antrean ini sedang tidak aktif')
     }
+
+    /**
+     * Pagar lokasi diperiksa sebelum apa pun yang lain: permintaan dari luar
+     * jangkauan tidak boleh sempat menyentuh pengaturan, formulir, apalagi antrean.
+     */
+    assertInsideGeofence(evaluateGeofence(page, params.visitor ?? null))
 
     // Pendaftaran mandiri bisa dimatikan menyeluruh dari pengaturan sistem (§49)
     const settings = await settingService.forEvent(page.event)

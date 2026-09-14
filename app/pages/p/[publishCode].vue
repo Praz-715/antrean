@@ -15,7 +15,24 @@ const publishCode = route.params.publishCode as string
  * dipakai pratinjau di builder. Berkas ini hanya mengurus yang tidak bisa diwakili
  * tampilan: memuat data, mengingat nomor yang sudah diambil, dan mengirim formulir.
  */
+interface GeofenceState {
+  required: boolean
+  inside: boolean
+  radiusM: number
+  latitude: number | null
+  longitude: number | null
+  distanceM: number | null
+}
+
+/**
+ * Halaman yang dipagari lokasi mengembalikan isi yang jauh lebih sedikit selama
+ * pengunjung belum terbukti berada di dalam jangkauan — cukup untuk menggambar layar
+ * verifikasi dengan identitas yang benar, tanpa membocorkan daftar layanan maupun
+ * formulirnya.
+ */
 interface PublicPageResponse extends PublicPageView {
+  access: 'granted' | 'geofenced'
+  geofence: GeofenceState
   page: PublicPageView['page'] & { publishCode: string, requireCaptcha: boolean }
   event: PublicPageView['event'] & { id: string, status: string, timezone: string }
   form: {
@@ -29,8 +46,54 @@ interface PublicPageResponse extends PublicPageView {
   features: { publicRegistration: boolean, ratingEnabled: boolean }
 }
 
-const { data, error, refresh } = await useAsyncData(`public-page-${publishCode}`, () =>
-  apiFetch<PublicPageResponse>(`/api/public/${publishCode}`))
+/**
+ * Koordinat pengunjung, bila halamannya memang meminta.
+ *
+ * Dikirim sebagai kueri dan diawasi `useAsyncData`, jadi begitu izin lokasi
+ * diberikan halamannya diminta ulang sendiri — tanpa muat ulang penuh.
+ */
+const koordinat = ref<{ latitude: number, longitude: number } | null>(null)
+
+const { data, error, refresh } = await useAsyncData(
+  `public-page-${publishCode}`,
+  () => apiFetch<PublicPageResponse>(`/api/public/${publishCode}`, {
+    query: koordinat.value
+      ? { lat: koordinat.value.latitude, lng: koordinat.value.longitude }
+      : undefined,
+  }),
+  { watch: [koordinat] },
+)
+
+/* ---------------- pagar lokasi (§36) ---------------- */
+
+const izinLokasi = ref<'idle' | 'meminta' | 'ditolak' | 'gagal' | 'tidakDidukung'>('idle')
+const terpagari = computed(() => data.value?.access === 'geofenced')
+
+/**
+ * Meminta lokasi ke peramban.
+ *
+ * Ketelitian tinggi dinyalakan karena yang dibandingkan jarak ratusan meter, dan
+ * hasil lama sampai satu menit masih boleh dipakai supaya menekan "coba lagi" tidak
+ * selalu menyalakan GPS dari nol.
+ */
+function mintaLokasi() {
+  if (!import.meta.client || !navigator.geolocation) {
+    izinLokasi.value = 'tidakDidukung'
+    return
+  }
+
+  izinLokasi.value = 'meminta'
+  navigator.geolocation.getCurrentPosition(
+    (pos) => {
+      izinLokasi.value = 'idle'
+      koordinat.value = { latitude: pos.coords.latitude, longitude: pos.coords.longitude }
+    },
+    (err) => {
+      izinLokasi.value = err.code === err.PERMISSION_DENIED ? 'ditolak' : 'gagal'
+    },
+    { enableHighAccuracy: true, timeout: 15_000, maximumAge: 60_000 },
+  )
+}
 
 useHead(() => ({
   title: data.value?.page.title ?? 'Ambil Antrean',
@@ -203,7 +266,13 @@ async function runAutofill() {
   try {
     const filled = await apiFetch<Record<string, string | number | boolean>>(
       `/api/public/${publishCode}/autofill`,
-      { method: 'POST', body: { lookup } },
+      {
+        method: 'POST',
+        body: {
+          lookup,
+          ...(koordinat.value ? { lat: koordinat.value.latitude, lng: koordinat.value.longitude } : {}),
+        },
+      },
     )
     // Field pemicu tidak ditimpa: yang baru saja diketik pengunjung yang benar.
     const applied: string[] = []
@@ -246,7 +315,14 @@ async function submit() {
   try {
     const result = await apiFetch<{ token: string }>(`/api/public/${publishCode}/queue`, {
       method: 'POST',
-      body: { queueTypeId: selectedTypeId.value, values, captchaToken: captchaToken.value || undefined, sliderToken },
+      body: {
+        queueTypeId: selectedTypeId.value,
+        values,
+        captchaToken: captchaToken.value || undefined,
+        sliderToken,
+        // Server memeriksa ulang pagar lokasinya; tombol yang tampil bukan izin.
+        ...(koordinat.value ? { lat: koordinat.value.latitude, lng: koordinat.value.longitude } : {}),
+      },
     })
     // Diingat supaya kunjungan berikutnya menampilkan nomor ini, bukan formulir kosong.
     tickets.remember(selectedTypeId.value, result.token)
@@ -280,6 +356,15 @@ async function submit() {
         {{ (error as unknown as ApiError).message }}
       </p>
     </div>
+
+    <PublicGeofenceGate
+      v-else-if="terpagari && data"
+      :page="data.page"
+      :organization="data.organization"
+      :geofence="data.geofence"
+      :status="izinLokasi"
+      @share="mintaLokasi"
+    />
 
     <template v-else-if="view && data">
       <PublicPageRenderer :view="view" :tickets="myTickets" @select="pilihLayanan" />

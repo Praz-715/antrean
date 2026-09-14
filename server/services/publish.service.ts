@@ -66,6 +66,10 @@ export const publishService = {
     allowedQueueTypeIds?: string[]
     maxPerIpPerDay?: number
     requireCaptcha?: boolean
+    geofenceEnabled?: boolean
+    latitude?: number | null
+    longitude?: number | null
+    geofenceRadiusM?: number
     theme?: Record<string, unknown>
   }) {
     const event = await prisma.event.findFirst({
@@ -93,6 +97,10 @@ export const publishService = {
         allowedQueueTypeIds: (input.allowedQueueTypeIds ?? []) as never,
         maxPerIpPerDay: input.maxPerIpPerDay ?? 5,
         requireCaptcha: input.requireCaptcha ?? false,
+        geofenceEnabled: input.geofenceEnabled ?? false,
+        latitude: input.latitude ?? null,
+        longitude: input.longitude ?? null,
+        geofenceRadiusM: input.geofenceRadiusM ?? 1000,
         isPublished: false,
       },
     })
@@ -103,6 +111,21 @@ export const publishService = {
 
   async update(organizationId: string, id: string, input: Record<string, unknown>) {
     const page = await this.getById(organizationId, id)
+
+    /**
+     * Pagar lokasi tanpa titik koordinat adalah pagar yang tidak bisa menolak siapa
+     * pun. Ditolak di sini — bukan didiamkan lalu diperlakukan sebagai mati di
+     * halaman publik — supaya admin tahu setelannya belum selesai.
+     */
+    const geofenceAktif = input.geofenceEnabled !== undefined ? Boolean(input.geofenceEnabled) : page.geofenceEnabled
+    const lat = input.latitude !== undefined ? input.latitude : page.latitude
+    const lng = input.longitude !== undefined ? input.longitude : page.longitude
+    if (geofenceAktif && (lat === null || lat === undefined || lng === null || lng === undefined)) {
+      throw errors.badRequest(
+        ERROR_CODES.VALIDATION_ERROR,
+        'Tentukan titik lokasi dulu sebelum menyalakan pagar lokasi.',
+      )
+    }
 
     const slug = typeof input.slug === 'string' && input.slug && input.slug !== page.slug
       ? await this.uniqueSlug(input.slug, id)
@@ -122,6 +145,10 @@ export const publishService = {
         ...(input.allowedQueueTypeIds !== undefined ? { allowedQueueTypeIds: input.allowedQueueTypeIds as never } : {}),
         ...(input.maxPerIpPerDay !== undefined ? { maxPerIpPerDay: Number(input.maxPerIpPerDay) } : {}),
         ...(input.requireCaptcha !== undefined ? { requireCaptcha: Boolean(input.requireCaptcha) } : {}),
+        ...(input.geofenceEnabled !== undefined ? { geofenceEnabled: Boolean(input.geofenceEnabled) } : {}),
+        ...(input.latitude !== undefined ? { latitude: input.latitude as number | null } : {}),
+        ...(input.longitude !== undefined ? { longitude: input.longitude as number | null } : {}),
+        ...(input.geofenceRadiusM !== undefined ? { geofenceRadiusM: Number(input.geofenceRadiusM) } : {}),
       },
     })
 

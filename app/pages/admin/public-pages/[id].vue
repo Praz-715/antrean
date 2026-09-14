@@ -31,6 +31,10 @@ interface PublicPageRow {
   isPublished: boolean
   maxPerIpPerDay: number
   requireCaptcha: boolean
+  geofenceEnabled: boolean
+  latitude: number | null
+  longitude: number | null
+  geofenceRadiusM: number
   allowedQueueTypeIds: string[] | null
   infoHtml: string | null
   logoUrl: string | null
@@ -69,8 +73,21 @@ const queueTypes = ref<AdminQueueType[]>([])
 const mediaImages = ref<Array<{ id: string, name: string, url: string }>>([])
 const mediaReadable = ref(true)
 const eventDetail = ref<EventDetail | null>(null)
-/** Data publik yang benar-benar tersaji hari ini; hanya ada bila halaman sudah terbit. */
-const livePublic = ref<{ queueTypes: PublicServiceView[], openState: PublicPageView['openState'], organization: { name: string, logoUrl: string | null } | null } | null>(null)
+/**
+ * Data publik yang benar-benar tersaji hari ini; hanya ada bila halaman sudah terbit.
+ *
+ * Halaman yang dipagari lokasi menjawab dengan isi terbatas selama peminta belum
+ * terbukti berada di dalam jangkauan — dan admin yang sedang menyusun tampilan
+ * biasanya tidak sedang berdiri di lokasi layanan. Jawaban seperti itu diperlakukan
+ * sebagai "tidak ada data langsung", bukan dipaksa dibaca.
+ */
+interface LivePublic {
+  access: 'granted' | 'geofenced'
+  queueTypes?: PublicServiceView[]
+  openState?: PublicPageView['openState']
+  organization: { name: string, logoUrl: string | null } | null
+}
+const livePublic = ref<LivePublic | null>(null)
 
 const pending = ref(true)
 const saving = ref(false)
@@ -89,6 +106,10 @@ function kosong(): PublicPageDraft {
     allowedQueueTypeIds: [],
     maxPerIpPerDay: 5,
     requireCaptcha: false,
+    geofenceEnabled: false,
+    latitude: null,
+    longitude: null,
+    geofenceRadiusM: 1000,
     theme: parsePublicPageTheme({}),
   }
 }
@@ -109,6 +130,10 @@ function isiDraft(row: PublicPageRow) {
     allowedQueueTypeIds: row.allowedQueueTypeIds ?? [],
     maxPerIpPerDay: row.maxPerIpPerDay,
     requireCaptcha: row.requireCaptcha,
+    geofenceEnabled: row.geofenceEnabled,
+    latitude: row.latitude,
+    longitude: row.longitude,
+    geofenceRadiusM: row.geofenceRadiusM,
     theme: parsePublicPageTheme(row.theme),
   }
   tersimpan.value = JSON.stringify(draft.value)
@@ -140,7 +165,7 @@ async function load() {
       apiFetch<typeof mediaImages.value>('/api/admin/media', { query: { type: 'IMAGE' } }).catch(() => null),
       apiFetch<EventDetail>(`/api/admin/events/${row.event.id}`).catch(() => null),
       row.isPublished
-        ? apiFetch<typeof livePublic.value>(`/api/public/${row.publishCode}`).catch(() => null)
+        ? apiFetch<LivePublic>(`/api/public/${row.publishCode}`).catch(() => null)
         : Promise.resolve(null),
     ])
 
@@ -148,7 +173,7 @@ async function load() {
     mediaReadable.value = media !== null
     mediaImages.value = media ?? []
     eventDetail.value = detail
-    livePublic.value = live
+    livePublic.value = live?.access === 'granted' ? live : null
   }
   finally { pending.value = false }
 }
@@ -192,7 +217,7 @@ const layananPratinjau = computed<PublicServiceView[]>(() => {
       color: t.color,
       icon: t.icon,
       estServiceSeconds: t.estServiceSeconds,
-      waitingCount: livePublic.value?.queueTypes.find(q => q.id === t.id)?.waitingCount ?? 0,
+      waitingCount: livePublic.value?.queueTypes?.find(q => q.id === t.id)?.waitingCount ?? 0,
     }))
 })
 
@@ -247,6 +272,10 @@ async function save() {
     allowedQueueTypeIds: draft.value.allowedQueueTypeIds,
     maxPerIpPerDay: Number(draft.value.maxPerIpPerDay),
     requireCaptcha: draft.value.requireCaptcha,
+    geofenceEnabled: draft.value.geofenceEnabled,
+    latitude: draft.value.latitude,
+    longitude: draft.value.longitude,
+    geofenceRadiusM: Number(draft.value.geofenceRadiusM),
   }
   const res = await call<PublicPageRow>(`/api/admin/public-pages/${pageId}`, { method: 'PATCH', body }, 'Halaman disimpan')
   saving.value = false

@@ -257,6 +257,16 @@ tampilannya berubah terang hanya bila pengguna memang memilih tema terang.
   menampilkannya sebagai bilah pemilih layanan. Loket tanpa layanan tidak bisa ditempati, dan
   layanan loket tidak bisa dikosongkan selama masih ada operator di sana. Konsekuensinya skrip uji
   membuat operator + loketnya sendiri — bukan memakai akun operator demo bersama.
+- **Pagar lokasi halaman publik (§36).** Halaman bisa dikunci agar hanya terbuka dalam radius
+  tertentu dari satu titik — diatur di tab **Lokasi** pada builder, lengkap dengan penguraian
+  tautan Google Maps dan tombol "Lokasi saya". Diperiksa di SERVER pada setiap endpoint publik,
+  bukan disembunyikan di antarmuka; pengunjung di luar jangkauan menerima layar verifikasi berisi
+  jarak dan tautan peta, tanpa daftar layanan maupun formulir. Koordinat pengunjung dipakai untuk
+  menghitung jarak lalu dibuang — tidak ada kolom yang menyimpannya. Dua hal yang mudah terlewat:
+  header `Permissions-Policy` hanya membuka `geolocation=(self)` pada `/p/**` dan
+  `/admin/public-pages/**`, dan peramban hanya mengizinkan pembacaan lokasi lewat HTTPS
+  (localhost dikecualikan). Pagar ini menahan, bukan mengunci: koordinat berasal dari peramban
+  pengunjung dan bisa dipalsukan aplikasi GPS palsu.
 - **Satu halaman publik, dua alamat.** `/p/w8j4hz76` memakai kode publikasi: itulah yang
   dicetak sebagai QR, dan "Ganti tautan & QR" menggantinya sehingga cetakan lama mati.
   `/p/layanan-ahu-kuningan-city` memakai slug pilihan admin dan tidak pernah berubah sendiri,

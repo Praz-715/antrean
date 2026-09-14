@@ -39,11 +39,22 @@ function buildCsp() {
 const CSP = buildCsp()
 
 export default defineEventHandler((event) => {
+  /**
+   * Geolocation dibuka HANYA pada halaman yang memang memakainya.
+   *
+   * Pagar lokasi halaman publik (§36) meminta lokasi pengunjung, dan builder punya
+   * tombol "Lokasi saya" untuk menentukan titiknya. Di luar dua jalur itu aksesnya
+   * tetap ditutup rapat — termasuk untuk iframe mana pun, karena `(self)` hanya
+   * mengizinkan dokumen dengan asal yang sama.
+   */
+  const perluLokasi = event.path.startsWith('/p/') || event.path.startsWith('/admin/public-pages')
+  const izinLokasi = perluLokasi ? 'geolocation=(self)' : 'geolocation=()'
+
   setResponseHeaders(event, {
     'X-Content-Type-Options': 'nosniff',
     'X-Frame-Options': 'SAMEORIGIN',
     'Referrer-Policy': 'strict-origin-when-cross-origin',
-    'Permissions-Policy': 'camera=(), microphone=(), geolocation=(), interest-cohort=()',
+    'Permissions-Policy': `camera=(), microphone=(), ${izinLokasi}, interest-cohort=()`,
     'Cross-Origin-Opener-Policy': 'same-origin',
     'Content-Security-Policy': CSP,
   })

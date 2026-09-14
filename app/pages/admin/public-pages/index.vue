@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { apiFetch } from '../../../composables/useApi'
 import { PERMISSIONS } from '#shared/constants/permissions'
+import { formatDistance } from '#shared/utils/geo'
 
 definePageMeta({ layout: 'admin', middleware: 'admin' })
 useHead({ title: 'Halaman Publik' })
@@ -21,6 +22,8 @@ interface PublicPageRow {
   subtitle: string | null
   isPublished: boolean
   maxPerIpPerDay: number
+  geofenceEnabled: boolean
+  geofenceRadiusM: number
   allowedQueueTypeIds: string[] | null
   logoUrl: string | null
   backgroundUrl: string | null
@@ -254,6 +257,12 @@ function printQr() {
             <span>QR v{{ page.qrCodes[0]?.version ?? 1 }}</span>
             <span>Maks {{ page.maxPerIpPerDay || '∞' }} / IP / hari</span>
             <span>{{ page.allowedQueueTypeIds?.length ? `${page.allowedQueueTypeIds.length} layanan` : 'Semua layanan' }}</span>
+            <!-- Pagar lokasi mengubah siapa yang bisa membuka halaman; itu pantas
+                 terlihat di daftar, bukan hanya di dalam builder. -->
+            <span v-if="page.geofenceEnabled" class="inline-flex items-center gap-1 font-medium text-amber-600 dark:text-amber-400">
+              <UIcon name="i-lucide-map-pin" class="size-3.5" />
+              Radius {{ formatDistance(page.geofenceRadiusM) }}
+            </span>
           </div>
 
           <div class="mt-4 flex flex-wrap gap-2">
