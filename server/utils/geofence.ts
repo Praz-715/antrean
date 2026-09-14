@@ -36,10 +36,17 @@ export interface GeofenceState {
   distanceM: number | null
 }
 
-/** Koordinat pengunjung dari kueri (GET) maupun badan permintaan (POST). */
+/**
+ * Koordinat pengunjung dari kueri (GET) maupun badan permintaan (POST).
+ *
+ * Nilai yang tidak masuk akal diperlakukan sebagai TIDAK ADA, bukan sebagai galat
+ * validasi. Ini alamat yang dibuka pengunjung: penanda buku yang basi atau tautan
+ * yang tersalin sebagian tidak boleh menghasilkan halaman galat mentah — yang benar
+ * adalah kembali ke layar verifikasi lokasi, keadaan paling aman yang tersedia.
+ */
 export const visitorCoordsSchema = z.object({
-  lat: z.coerce.number().min(-90).max(90).optional(),
-  lng: z.coerce.number().min(-180).max(180).optional(),
+  lat: z.coerce.number().min(-90).max(90).optional().catch(undefined),
+  lng: z.coerce.number().min(-180).max(180).optional().catch(undefined),
 })
 
 export function coordsOf(input: { lat?: number, lng?: number }) {

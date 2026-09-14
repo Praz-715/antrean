@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import { distanceMeters, formatDistance, parseCoordinates } from '../../shared/utils/geo'
-import { evaluateGeofence } from '../../server/utils/geofence'
+import { coordsOf, evaluateGeofence, visitorCoordsSchema } from '../../server/utils/geofence'
 
 const MONAS = { latitude: -6.175392, longitude: 106.827153 }
 
@@ -91,5 +91,29 @@ describe('jarak untuk dibaca orang', () => {
     expect(formatDistance(850)).toBe('850 m')
     expect(formatDistance(1000)).toBe('1,0 km')
     expect(formatDistance(3412)).toBe('3,4 km')
+  })
+})
+
+describe('koordinat yang dikirim pengunjung', () => {
+  const baca = (raw: unknown) => coordsOf(visitorCoordsSchema.parse(raw))
+
+  it('membaca angka maupun teks angka', () => {
+    expect(baca({ lat: -6.2, lng: 106.8 })).toEqual({ latitude: -6.2, longitude: 106.8 })
+    expect(baca({ lat: '-6.2', lng: '106.8' })).toEqual({ latitude: -6.2, longitude: 106.8 })
+  })
+
+  /**
+   * Ini alamat yang dibuka pengunjung: penanda buku basi atau tautan tersalin
+   * sebagian harus kembali ke layar verifikasi, bukan menghasilkan galat mentah.
+   */
+  it('memperlakukan nilai ngawur sebagai tidak ada lokasi', () => {
+    expect(baca({ lat: 999, lng: 'abc' })).toBeNull()
+    expect(baca({ lat: 'entah', lng: 'apa' })).toBeNull()
+    expect(baca({})).toBeNull()
+  })
+
+  it('setengah koordinat tetap dianggap tidak ada', () => {
+    expect(baca({ lat: -6.2 })).toBeNull()
+    expect(baca({ lng: 106.8 })).toBeNull()
   })
 })
