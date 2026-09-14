@@ -161,6 +161,30 @@ lain, atau dari `purpose` berbeda: `400` `CAPTCHA_INVALID`.
 
 ## Publik (tanpa login)
 
+### `GET /api/public/landing`
+
+Isi halaman pangkal (`/`) menurut pengaturan `system.landing`. Mengembalikan KEPUTUSAN, bukan
+pengaturan mentah — klien cukup mengikuti `redirect` atau menggambar `pages`.
+
+```jsonc
+{
+  "mode": "none",        // none | directory | event
+  "redirect": null,      // terisi "/p/{publishCode}" hanya pada mode "event"
+  "organization": { "id": "01M1…", "name": "Demo Organization", "logoUrl": null },
+  "pages": []            // terisi pada mode "directory": kartu halaman publik yang terbit
+}
+```
+
+Tiap entri `pages` membawa `publishCode`, `title`, `subtitle`, `logoUrl`, `backgroundUrl`,
+`primaryColor`, `eventName`, dan status buka hari ini (`isOpen`, `openTime`, `closeTime`).
+Maksimal 24 halaman. Bila event yang dipilih tidak lagi punya halaman terbit, jawabannya kembali
+ke `none` — pengunjung tidak pernah dialihkan ke halaman yang sengaja ditutup.
+
+> **`{publishCode}` menerima dua bentuk.** Kode publikasi (`w8j4hz76`) — yang tercetak di QR dan
+> bisa diganti kapan saja — maupun slug halaman (`layanan-ahu-kuningan-city`) yang tetap. Keduanya
+> membuka halaman yang sama dan berlaku pada seluruh endpoint publik di bawah ini. Bila sebuah slug
+> kebetulan sama dengan kode publikasi halaman lain, yang menang kode publikasinya.
+
 ### `GET /api/public/{publishCode}`
 
 Konfigurasi halaman: branding, daftar layanan beserta jumlah yang menunggu, definisi formulir aktif,
@@ -416,6 +440,9 @@ Reset kata sandi mencabut seluruh sesi aktif pengguna tersebut.
 |---|---|
 | `GET/POST /api/admin/public-pages` | `public_page.view` / `public_page.manage` |
 | `GET /api/admin/public-pages/{id}` | `public_page.view` — satu halaman, dipakai builder |
+
+Respons halaman publik membawa dua alamat: `url` (kode publikasi) dan `slugUrl` (`null` bila
+slugnya belum diisi).
 | `PATCH/DELETE /api/admin/public-pages/{id}` | `public_page.manage` |
 | `POST /api/admin/public-pages/{id}/publish` | `public_page.publish` |
 | `POST /api/admin/public-pages/{id}/qr` | `public_page.manage` |

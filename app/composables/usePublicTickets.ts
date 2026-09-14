@@ -8,14 +8,19 @@
  *
  * Disimpan per halaman publik (bukan global) supaya satu perangkat yang dipakai di dua
  * kantor berbeda tidak saling menimpa ingatannya.
+ *
+ * Kuncinya memakai KODE PUBLIKASI halaman, bukan potongan alamat yang diketik
+ * pengunjung: satu halaman kini bisa dibuka lewat kode maupun slug, dan tanpa kunci
+ * yang sama, nomor yang diambil dari QR tidak akan terlihat saat halaman yang sama
+ * dibuka lewat tautan tetap.
  */
 export interface RememberedTicket {
   token: string
   queueTypeId: string
 }
 
-export function usePublicTickets(publishCode: string) {
-  const KEY = `antrean:tiket:${publishCode}`
+export function usePublicTickets(publishCode: MaybeRefOrGetter<string>) {
+  const kunci = () => `antrean:tiket:${toValue(publishCode)}`
 
   /**
    * Semua pembacaan dibungkus try/catch: mode penyamaran dan peramban yang memblokir
@@ -25,7 +30,7 @@ export function usePublicTickets(publishCode: string) {
   function read(): Record<string, string> {
     if (typeof window === 'undefined') return {}
     try {
-      const raw = window.localStorage.getItem(KEY)
+      const raw = window.localStorage.getItem(kunci())
       const parsed = raw ? JSON.parse(raw) : null
       return parsed && typeof parsed === 'object' ? parsed as Record<string, string> : {}
     }
@@ -37,7 +42,7 @@ export function usePublicTickets(publishCode: string) {
   function write(map: Record<string, string>) {
     if (typeof window === 'undefined') return
     try {
-      window.localStorage.setItem(KEY, JSON.stringify(map))
+      window.localStorage.setItem(kunci(), JSON.stringify(map))
     }
     catch {
       // Diabaikan: pengunjung tetap bisa mengambil nomor, hanya tidak diingat.

@@ -37,6 +37,8 @@ interface PublicPageRow {
   backgroundUrl: string | null
   theme: unknown
   url: string
+  /** Tautan tetap dari slug; null bila slugnya belum diisi. */
+  slugUrl: string | null
   event: { id: string, name: string, status: string }
   qrCodes: Array<{ id: string, version: number }>
 }
@@ -291,9 +293,8 @@ async function confirmDelete() {
   if (res) await navigateTo('/admin/public-pages')
 }
 
-async function copyUrl() {
-  if (!page.value) return
-  await navigator.clipboard.writeText(page.value.url)
+async function copyUrl(url: string) {
+  await navigator.clipboard.writeText(url)
   toast.add({ title: 'Tautan disalin', color: 'success', icon: 'i-lucide-copy' })
 }
 
@@ -373,6 +374,8 @@ onBeforeRouteLeave(() => {
           :is-published="page.isPublished"
           :publish-code="page.publishCode"
           :public-url="page.url"
+          :slug-url="page.slugUrl"
+          :saved-slug="page.slug ?? ''"
           @regenerate-qr="regenerateQr(false)"
           @rotate-code="rotateOpen = true"
           @show-qr="qrOpen = true"

@@ -4,9 +4,24 @@ import { errors } from '../utils/response'
 import { ERROR_CODES } from '../../shared/constants/errors'
 import { newId, newShortCode, slugify } from '../utils/id'
 
-function publicUrl(publishCode: string) {
+/**
+ * Dua alamat untuk satu halaman.
+ *
+ * `url` memakai kode publikasi — inilah yang dicetak menjadi QR dan bisa diganti
+ * kapan saja untuk mematikan cetakan lama. `slugUrl` memakai slug pilihan admin dan
+ * tidak pernah berubah sendiri, jadi aman ditempel di situs, dibagikan di pesan,
+ * atau ditulis di spanduk. Keduanya membuka halaman yang sama persis.
+ */
+function publicUrl(path: string) {
   const base = process.env.APP_URL || 'http://localhost:3000'
-  return `${base.replace(/\/$/, '')}/p/${publishCode}`
+  return `${base.replace(/\/$/, '')}/p/${path}`
+}
+
+function urlsOf(page: { publishCode: string, slug: string | null }) {
+  return {
+    url: publicUrl(page.publishCode),
+    slugUrl: page.slug ? publicUrl(page.slug) : null,
+  }
 }
 
 export const publishService = {
@@ -24,7 +39,7 @@ export const publishService = {
       },
     })
 
-    return pages.map(p => ({ ...p, url: publicUrl(p.publishCode) }))
+    return pages.map(p => ({ ...p, ...urlsOf(p) }))
   },
 
   async getById(organizationId: string, id: string) {
@@ -36,7 +51,7 @@ export const publishService = {
       },
     })
     if (!page) throw errors.notFound('Halaman publik tidak ditemukan')
-    return { ...page, url: publicUrl(page.publishCode) }
+    return { ...page, ...urlsOf(page) }
   },
 
   async create(organizationId: string, input: {

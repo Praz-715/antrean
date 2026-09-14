@@ -22,6 +22,10 @@ const props = defineProps<{
   isPublished: boolean
   publishCode: string
   publicUrl: string
+  /** Tautan tetap dari slug; null selama slugnya belum diisi. */
+  slugUrl: string | null
+  /** Slug yang benar-benar tersimpan, untuk membandingkan dengan yang sedang diketik. */
+  savedSlug: string
 }>()
 
 const emit = defineEmits<{
@@ -29,7 +33,7 @@ const emit = defineEmits<{
   rotateCode: []
   showQr: []
   remove: []
-  copyUrl: []
+  copyUrl: [url: string]
 }>()
 
 const draft = defineModel<PublicPageDraft>({ required: true })
@@ -111,6 +115,9 @@ const GAYA_KARTU = [
 
 const typeOptions = computed(() =>
   props.queueTypes.map(t => ({ label: `${t.code} · ${t.name}`, value: t.id })))
+
+/** Slug di kotak isian sudah berbeda dari yang tersimpan — tautannya belum berpindah. */
+const slugBerubah = computed(() => draft.value.slug.trim() !== props.savedSlug)
 </script>
 
 <template>
@@ -148,7 +155,10 @@ const typeOptions = computed(() =>
           <UInput v-model="draft.subtitle" class="w-full" maxlength="190" placeholder="Silakan ambil nomor antrean" />
         </UFormField>
 
-        <UFormField label="Slug URL" help="Opsional, untuk tautan yang mudah diingat.">
+        <UFormField
+          label="Slug URL"
+          help="Opsional. Mengisinya memberi halaman ini tautan kedua yang tetap — tidak ikut berubah saat kode QR diganti."
+        >
           <UInput v-model="draft.slug" class="w-full" placeholder="galeri-inovasi-ahu" />
         </UFormField>
 
@@ -532,22 +542,63 @@ const typeOptions = computed(() =>
           <p class="mb-1 text-xs font-medium text-slate-500">
             Tautan halaman
           </p>
-          <div class="flex items-center gap-2 rounded-lg bg-slate-50 p-2 dark:bg-slate-800/50">
-            <UIcon name="i-lucide-link" class="size-4 shrink-0 text-slate-400" />
-            <code class="min-w-0 flex-1 truncate text-xs">{{ publicUrl }}</code>
-            <UButton
-              icon="i-lucide-copy"
-              aria-label="Salin tautan halaman"
-              title="Salin tautan halaman"
-              size="xs"
-              variant="ghost"
-              color="neutral"
-              @click="emit('copyUrl')"
-            />
+
+          <!--
+            Dua alamat untuk satu halaman, dipisah supaya bedanya jelas: yang atas
+            tercetak di QR dan bisa diganti kapan saja, yang bawah tetap.
+          -->
+          <div class="space-y-2">
+            <div>
+              <div class="flex items-center gap-2 rounded-lg bg-slate-50 p-2 dark:bg-slate-800/50">
+                <UIcon name="i-lucide-qr-code" class="size-4 shrink-0 text-slate-400" />
+                <code class="min-w-0 flex-1 truncate text-xs">{{ publicUrl }}</code>
+                <UButton
+                  icon="i-lucide-copy"
+                  aria-label="Salin tautan kode publikasi"
+                  title="Salin tautan kode publikasi"
+                  size="xs"
+                  variant="ghost"
+                  color="neutral"
+                  @click="emit('copyUrl', publicUrl)"
+                />
+              </div>
+              <p class="mt-1 text-xs text-slate-500">
+                Tautan QR — kode <b class="font-mono">{{ publishCode }}</b>, bisa diganti kapan saja.
+              </p>
+            </div>
+
+            <div>
+              <div
+                v-if="slugUrl"
+                class="flex items-center gap-2 rounded-lg bg-slate-50 p-2 dark:bg-slate-800/50"
+              >
+                <UIcon name="i-lucide-link" class="size-4 shrink-0 text-slate-400" />
+                <code class="min-w-0 flex-1 truncate text-xs">{{ slugUrl }}</code>
+                <UButton
+                  icon="i-lucide-copy"
+                  aria-label="Salin tautan tetap"
+                  title="Salin tautan tetap"
+                  size="xs"
+                  variant="ghost"
+                  color="neutral"
+                  @click="emit('copyUrl', slugUrl)"
+                />
+              </div>
+              <div
+                v-else
+                class="rounded-lg border border-dashed border-slate-300 p-2 text-xs text-slate-500 dark:border-slate-700"
+              >
+                Belum ada tautan tetap. Isi <b>Slug URL</b> di bagian Halaman untuk membuatnya.
+              </div>
+              <p v-if="slugUrl" class="mt-1 text-xs text-slate-500">
+                Tautan tetap — tidak ikut berubah saat kode publikasi diganti.
+              </p>
+              <p v-if="slugBerubah" class="mt-1 text-xs text-amber-600 dark:text-amber-400">
+                Slug yang sedang diketik baru berlaku setelah disimpan.
+              </p>
+            </div>
           </div>
-          <p class="mt-2 text-xs text-slate-500">
-            Kode publikasi: <b class="font-mono">{{ publishCode }}</b>
-          </p>
+
           <div class="mt-3 flex flex-wrap gap-2">
             <UButton size="sm" icon="i-lucide-qr-code" variant="outline" color="neutral" label="QR Code" @click="emit('showQr')" />
             <UButton size="sm" icon="i-lucide-refresh-cw" variant="outline" color="neutral" label="Perbarui QR" @click="emit('regenerateQr')" />

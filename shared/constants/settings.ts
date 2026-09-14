@@ -25,9 +25,34 @@ export const SETTING_KEYS = {
   DISPLAY_TIMEOUT_SECONDS: 'display.timeoutSeconds',
   SYSTEM_TIMEZONE: 'system.timezone',
   SYSTEM_SESSION_MINUTES: 'system.sessionDurationMinutes',
+  SYSTEM_LANDING: 'system.landing',
 } as const
 
 export type SettingKey = (typeof SETTING_KEYS)[keyof typeof SETTING_KEYS]
+
+/**
+ * Halaman yang dibuka pengunjung saat mengakses alamat pangkal (`/`).
+ *
+ * Nilainya satu string supaya cukup satu pilihan di antarmuka: `none`,
+ * `directory`, atau `event:<id>`. Menyimpannya sebagai dua pengaturan terpisah
+ * (mode + id event) hanya menghasilkan keadaan yang mustahil — mode `none` dengan
+ * id event tersisa — yang harus dijaga di setiap pembacanya.
+ */
+export const LANDING_NONE = 'none'
+export const LANDING_DIRECTORY = 'directory'
+export const LANDING_EVENT_PREFIX = 'event:'
+
+export type LandingMode = 'none' | 'directory' | 'event'
+
+export function parseLanding(raw: unknown): { mode: LandingMode, eventId: string | null } {
+  const value = String(raw ?? LANDING_NONE).trim()
+  if (value === LANDING_DIRECTORY) return { mode: 'directory', eventId: null }
+  if (value.startsWith(LANDING_EVENT_PREFIX)) {
+    const id = value.slice(LANDING_EVENT_PREFIX.length)
+    return /^[0-9A-HJKMNP-TV-Z]{26}$/i.test(id) ? { mode: 'event', eventId: id } : { mode: 'none', eventId: null }
+  }
+  return { mode: 'none', eventId: null }
+}
 
 /** Nada bawaan sistem memakai awalan ini; sisanya dianggap id berkas Media Library. */
 export const SYSTEM_TONE_VALUE_PREFIX = 'system:'
@@ -43,7 +68,11 @@ export interface SettingDefinition {
    * `media` = pilih berkas dari Media Library; nilainya disimpan sebagai id media.
    * Pilihannya tidak bisa ditulis di katalog karena isinya berubah-ubah.
    */
-  type: 'boolean' | 'number' | 'text' | 'select' | 'media'
+  /**
+   * `landing` = tujuan halaman pangkal. Seperti `media`, pilihannya tidak bisa
+   * ditulis di katalog karena bergantung pada event yang ada dan sudah terbit.
+   */
+  type: 'boolean' | 'number' | 'text' | 'select' | 'media' | 'landing'
   default: SettingValue
   min?: number
   max?: number
@@ -266,6 +295,14 @@ export const SETTINGS_CATALOG: SettingDefinition[] = [
     max: 43200,
     unit: 'menit',
   },
+  {
+    key: SETTING_KEYS.SYSTEM_LANDING,
+    label: 'Halaman pangkal (/)',
+    help: 'Yang dilihat pengunjung saat membuka alamat utama tanpa tautan atau QR — halaman sambutan, daftar semua halaman publik, atau langsung satu event.',
+    group: 'system',
+    type: 'landing',
+    default: LANDING_NONE,
+  },
 ]
 
 export const SETTINGS_BY_KEY: Record<string, SettingDefinition> = Object.fromEntries(
@@ -315,6 +352,19 @@ export function coerceSetting(def: SettingDefinition, raw: unknown): SettingValu
         return /^system:[a-z0-9-]{1,40}$/i.test(id) ? id : ''
       }
       return /^[0-9A-HJKMNP-TV-Z]{26}$/i.test(id) ? id : ''
+    }
+    /**
+     * Bentuknya diperiksa di sini, keberadaan event-nya tidak: event bisa dihapus
+     * jauh setelah dipilih, dan halaman pangkal menanganinya sendiri dengan kembali
+     * ke halaman sambutan — bukan dengan mengunci pengaturan.
+     */
+    case 'landing': {
+      const value = String(raw).trim()
+      if (value === LANDING_DIRECTORY) return value
+      if (value.startsWith(LANDING_EVENT_PREFIX)) {
+        return parseLanding(value).mode === 'event' ? value : LANDING_NONE
+      }
+      return LANDING_NONE
     }
   }
 }

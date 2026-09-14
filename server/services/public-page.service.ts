@@ -11,12 +11,14 @@ import { settingService } from './setting.service'
 import { datasourceService } from './datasource.service'
 import { SETTING_KEYS } from '../../shared/constants/settings'
 import { parsePublicPageTheme } from '../../shared/schemas/public-page'
+import { byCodeOrSlug, pickCanonical } from '../utils/public-page-lookup'
 
 export const publicPageService = {
   /** Konfigurasi halaman publik + layanan yang tersedia + status buka (§4). */
   async getByPublishCode(publishCode: string) {
-    const page = await prisma.publicPage.findFirst({
-      where: { publishCode, deletedAt: null },
+    const kandidat = await prisma.publicPage.findMany({
+      where: { deletedAt: null, ...byCodeOrSlug(publishCode) },
+      take: 2,
       include: {
         event: {
           select: {
@@ -36,6 +38,7 @@ export const publicPageService = {
       },
     })
 
+    const page = pickCanonical(kandidat, publishCode)
     if (!page) throw errors.notFound('Halaman antrean tidak ditemukan')
     if (!page.isPublished) {
       throw errors.badRequest(ERROR_CODES.PAGE_NOT_PUBLISHED, 'Halaman antrean ini sedang tidak aktif')
@@ -159,10 +162,14 @@ export const publicPageService = {
    * pemetaan — sehingga respons pihak ketiga tidak bisa menitipkan kunci lain.
    */
   async autofill(publishCode: string, lookup: string) {
-    const page = await prisma.publicPage.findFirst({
-      where: { publishCode, deletedAt: null, isPublished: true },
-      select: { eventId: true },
-    })
+    const page = pickCanonical(
+      await prisma.publicPage.findMany({
+        where: { deletedAt: null, isPublished: true, ...byCodeOrSlug(publishCode) },
+        take: 2,
+        select: { publishCode: true, eventId: true },
+      }),
+      publishCode,
+    )
     if (!page) throw errors.notFound('Halaman antrean tidak ditemukan')
 
     const form = await prisma.formDefinition.findFirst({
@@ -195,9 +202,11 @@ export const publicPageService = {
     ipAddress?: string | null
     userAgent?: string | null
   }) {
-    const page = await prisma.publicPage.findFirst({
-      where: { publishCode: params.publishCode, deletedAt: null },
+    const kandidatDaftar = await prisma.publicPage.findMany({
+      where: { deletedAt: null, ...byCodeOrSlug(params.publishCode) },
+      take: 2,
       select: {
+        publishCode: true,
         id: true,
         eventId: true,
         isPublished: true,
@@ -207,6 +216,7 @@ export const publicPageService = {
         event: { select: { organizationId: true, settings: true, timezone: true } },
       },
     })
+    const page = pickCanonical(kandidatDaftar, params.publishCode)
     if (!page) throw errors.notFound('Halaman antrean tidak ditemukan')
     if (!page.isPublished) {
       throw errors.badRequest(ERROR_CODES.PAGE_NOT_PUBLISHED, 'Halaman antrean ini sedang tidak aktif')

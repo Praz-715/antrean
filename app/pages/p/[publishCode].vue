@@ -67,7 +67,11 @@ const view = computed<PublicPageView | null>(() => {
 })
 
 // ---- antrean yang sudah diambil dari perangkat ini ----
-const tickets = usePublicTickets(publishCode)
+/**
+ * Ingatan nomor dikunci pada kode publikasi yang dikembalikan server, bukan pada
+ * potongan alamat yang dibuka — halaman ini bisa dicapai lewat kode maupun slug.
+ */
+const tickets = usePublicTickets(() => data.value?.page.publishCode ?? publishCode)
 /** Kunci: id jenis antrean. Hanya berisi antrean yang MASIH berlaku hari ini. */
 const myTickets = ref<Record<string, PublicTicketView>>({})
 

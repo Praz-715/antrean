@@ -257,6 +257,20 @@ tampilannya berubah terang hanya bila pengguna memang memilih tema terang.
   menampilkannya sebagai bilah pemilih layanan. Loket tanpa layanan tidak bisa ditempati, dan
   layanan loket tidak bisa dikosongkan selama masih ada operator di sana. Konsekuensinya skrip uji
   membuat operator + loketnya sendiri — bukan memakai akun operator demo bersama.
+- **Satu halaman publik, dua alamat.** `/p/w8j4hz76` memakai kode publikasi: itulah yang
+  dicetak sebagai QR, dan "Ganti tautan & QR" menggantinya sehingga cetakan lama mati.
+  `/p/layanan-ahu-kuningan-city` memakai slug pilihan admin dan tidak pernah berubah sendiri,
+  jadi aman ditempel di situs atau dibagikan lewat pesan. Seluruh endpoint publik menerima
+  keduanya (`server/utils/public-page-lookup.ts`), dan ingatan "nomor saya" di peramban dikunci
+  pada kode publikasi supaya nomor yang diambil lewat QR tetap terlihat saat halaman yang sama
+  dibuka lewat tautan tetap.
+- **Halaman pangkal (`/`) bisa diarahkan (§49).** Pengaturan `system.landing` di
+  `/admin/settings` menentukan apa yang dilihat orang yang mengetik alamat utama tanpa
+  memegang tautan atau QR: halaman sambutan seperti bawaan, daftar kartu semua halaman publik
+  yang terbit (lengkap dengan status buka), atau langsung dialihkan ke satu event. Pilihan
+  per-event tumbuh sendiri mengikuti event yang PUNYA halaman terbit — event yang halamannya
+  masih draf tidak ditawarkan, dan bila halaman yang dipilih kemudian ditarik dari publikasi,
+  halaman pangkal kembali ke sambutan alih-alih mengalihkan ke halaman mati.
 - **Halaman publik & builder-nya (§48).** Tampilan halaman pengunjung disusun di
   `/admin/public-pages/{id}`: panel setelan di atas, pratinjau halaman sungguhan di bawah.
   Pratinjaunya bukan tiruan — yang digambar komponen yang sama persis dengan yang dilihat

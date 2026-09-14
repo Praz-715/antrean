@@ -26,6 +26,7 @@ interface PublicPageRow {
   backgroundUrl: string | null
   theme: { primaryColor?: string, secondaryColor?: string } | null
   url: string
+  slugUrl: string | null
   event: { id: string, name: string, status: string }
   qrCodes: Array<{ id: string, version: number }>
 }
@@ -229,11 +230,23 @@ function printQr() {
             {{ page.subtitle || 'Tanpa subjudul' }}
           </p>
 
-          <div class="mt-3 flex items-center gap-2 rounded-lg bg-slate-50 p-2 dark:bg-slate-800/50">
-            <UIcon name="i-lucide-link" class="size-4 shrink-0 text-slate-400" />
-            <code class="min-w-0 flex-1 truncate text-xs">{{ page.url }}</code>
-            <UButton icon="i-lucide-copy" aria-label="Salin tautan halaman" title="Salin tautan halaman" size="xs" variant="ghost" color="neutral" @click="copyUrl(page.url)" />
-            <UButton icon="i-lucide-external-link" aria-label="Buka halaman publik" title="Buka halaman publik" size="xs" variant="ghost" color="neutral" :to="page.url" target="_blank" />
+          <!--
+            Dua alamat: yang atas tercetak di QR dan bisa diganti, yang bawah tetap
+            selama slugnya tidak diubah.
+          -->
+          <div class="mt-3 space-y-1.5">
+            <div class="flex items-center gap-2 rounded-lg bg-slate-50 p-2 dark:bg-slate-800/50">
+              <UIcon name="i-lucide-qr-code" class="size-4 shrink-0 text-slate-400" />
+              <code class="min-w-0 flex-1 truncate text-xs">{{ page.url }}</code>
+              <UButton icon="i-lucide-copy" aria-label="Salin tautan kode publikasi" title="Salin tautan kode publikasi" size="xs" variant="ghost" color="neutral" @click="copyUrl(page.url)" />
+              <UButton icon="i-lucide-external-link" aria-label="Buka halaman publik" title="Buka halaman publik" size="xs" variant="ghost" color="neutral" :to="page.url" target="_blank" />
+            </div>
+            <div v-if="page.slugUrl" class="flex items-center gap-2 rounded-lg bg-slate-50 p-2 dark:bg-slate-800/50">
+              <UIcon name="i-lucide-link" class="size-4 shrink-0 text-slate-400" />
+              <code class="min-w-0 flex-1 truncate text-xs">{{ page.slugUrl }}</code>
+              <UButton icon="i-lucide-copy" aria-label="Salin tautan tetap" title="Salin tautan tetap" size="xs" variant="ghost" color="neutral" @click="copyUrl(page.slugUrl)" />
+              <UButton icon="i-lucide-external-link" aria-label="Buka tautan tetap" title="Buka tautan tetap" size="xs" variant="ghost" color="neutral" :to="page.slugUrl" target="_blank" />
+            </div>
           </div>
 
           <div class="mt-3 flex flex-wrap gap-x-3 gap-y-1 text-xs text-slate-500">

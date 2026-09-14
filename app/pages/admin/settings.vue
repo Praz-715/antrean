@@ -3,6 +3,9 @@ import { apiFetch } from '../../composables/useApi'
 import { SYSTEM_TONES, systemToneUrl } from '#shared/constants/tones'
 import { PERMISSIONS } from '#shared/constants/permissions'
 import {
+  LANDING_DIRECTORY,
+  LANDING_EVENT_PREFIX,
+  LANDING_NONE,
   SETTINGS_CATALOG,
   SETTING_GROUPS,
   type SettingDefinition,
@@ -43,6 +46,15 @@ const orgDraft = reactive({ name: '' })
 const mediaFiles = ref<Array<{ id: string, name: string, url: string, type: string }>>([])
 const SELECT_KOSONG = '__none__'
 
+/**
+ * Halaman publik yang sudah terbit, untuk pilihan halaman pangkal.
+ *
+ * Yang ditawarkan hanya event yang PUNYA halaman terbit: mengarahkan alamat utama ke
+ * event yang halamannya masih draf menghasilkan pengalihan ke halaman yang menolak
+ * pengunjung — pilihan yang tidak pernah benar untuk ditawarkan.
+ */
+const publicPages = ref<Array<{ publishCode: string, title: string, isPublished: boolean, event: { id: string, name: string } }>>([])
+
 const editable = computed(() => can(PERMISSIONS.SETTING_MANAGE))
 
 /** Salinan kerja: perubahan baru menyentuh state bersama setelah tersimpan. */
@@ -56,14 +68,16 @@ function resetDraft(source: SettingsMap) {
  * Keduanya dimulai bersamaan: `apiFetch` yang dipanggil setelah `await` di dalam
  * setup kehilangan konteks Nuxt dan menjatuhkan render server.
  */
-const [, profile, media] = await Promise.all([
+const [, profile, media, pages] = await Promise.all([
   load(),
   apiFetch<OrganizationProfile>('/api/admin/organization').catch(() => null),
   // Tanpa izin media.view daftarnya kosong — kolomnya tetap tampil, hanya tanpa pilihan.
   apiFetch<typeof mediaFiles.value>('/api/admin/media').catch(() => []),
+  apiFetch<typeof publicPages.value>('/api/admin/public-pages').catch(() => []),
 ])
 organization.value = profile
 mediaFiles.value = media ?? []
+publicPages.value = pages ?? []
 orgDraft.name = profile?.name ?? ''
 resetDraft(values.value)
 
@@ -155,6 +169,42 @@ function mediaOptions(def: SettingDefinition) {
       .filter(m => !def.mediaType || m.type === def.mediaType)
       .map(m => ({ label: m.name, value: m.id })),
   ]
+}
+
+/**
+ * Pilihan untuk kolom bertipe `landing`.
+ *
+ * Jumlahnya mengikuti event yang ada: satu baris untuk tiap event yang punya halaman
+ * terbit, jadi instalasi dengan sepuluh event menawarkan sepuluh tujuan.
+ */
+function landingOptions() {
+  const terbit = publicPages.value.filter(p => p.isPublished)
+  const perEvent = new Map<string, { id: string, name: string, jumlah: number }>()
+  for (const p of terbit) {
+    const ada = perEvent.get(p.event.id)
+    if (ada) ada.jumlah += 1
+    else perEvent.set(p.event.id, { id: p.event.id, name: p.event.name, jumlah: 1 })
+  }
+
+  return [
+    { label: 'Halaman sambutan ANTREAN', value: LANDING_NONE },
+    ...(terbit.length
+      ? [{ label: `Daftar semua halaman publik (${terbit.length})`, value: LANDING_DIRECTORY }]
+      : []),
+    ...[...perEvent.values()].map(e => ({
+      label: e.jumlah > 1 ? `Event: ${e.name} — halaman terbaru` : `Event: ${e.name}`,
+      value: LANDING_EVENT_PREFIX + e.id,
+    })),
+  ]
+}
+
+/** Penjelasan tambahan di bawah kolom halaman pangkal, mengikuti pilihan yang aktif. */
+function landingHint(value: unknown) {
+  const v = String(value ?? LANDING_NONE)
+  if (v === LANDING_DIRECTORY) return 'Pengunjung melihat kartu semua halaman publik yang terbit, lengkap dengan status buka.'
+  if (v.startsWith(LANDING_EVENT_PREFIX)) return 'Alamat utama langsung dialihkan ke halaman publik event tersebut.'
+  if (!publicPages.value.some(p => p.isPublished)) return 'Belum ada halaman publik yang terbit, jadi baru pilihan ini yang tersedia.'
+  return 'Halaman sambutan dengan tombol Masuk, seperti sebelumnya.'
 }
 
 function mediaUrlOf(id: unknown) {
@@ -286,7 +336,7 @@ function isVisible(def: SettingDefinition) {
             </div>
 
             <!-- Kolom media & teks panjang butuh ruang lebih; sisanya cukup sempit -->
-            <div :class="def.type === 'media' || def.type === 'text' ? 'w-full sm:w-80' : 'w-full sm:w-56'">
+            <div :class="['media', 'text', 'landing'].includes(def.type) ? 'w-full sm:w-80' : 'w-full sm:w-56'">
               <USwitch
                 v-if="def.type === 'boolean'"
                 :model-value="Boolean(draft[def.key])"
@@ -317,6 +367,20 @@ function isVisible(def: SettingDefinition) {
                 class="w-full"
                 @update:model-value="(v: string) => (draft[def.key] = v)"
               />
+
+              <div v-else-if="def.type === 'landing'" class="space-y-1.5">
+                <USelect
+                  :model-value="String(draft[def.key])"
+                  :items="landingOptions()"
+                  :aria-label="def.label"
+                  :disabled="!editable"
+                  class="w-full"
+                  @update:model-value="(v: string) => (draft[def.key] = v)"
+                />
+                <p class="text-xs text-slate-500">
+                  {{ landingHint(draft[def.key]) }}
+                </p>
+              </div>
 
               <div v-else-if="def.type === 'media'" class="space-y-2">
                 <USelectMenu
