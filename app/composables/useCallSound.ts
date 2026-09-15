@@ -6,8 +6,22 @@
  * ulang untuk semuanya supaya "izin bunyi" yang didapat dari satu ketukan pengguna
  * tetap berlaku untuk pemutaran berikutnya.
  */
+/**
+ * Hasil satu pemutaran.
+ *
+ * `diganti` ada karena satu elemen dipakai bersama: begitu panggilan berikutnya
+ * datang, pemutaran yang sedang jalan memang harus berhenti — dan itu BUKAN
+ * kegagalan. Membedakannya penting: pemanggil hanya boleh jatuh ke cara lain
+ * (suara peramban) saat benar-benar `gagal`. Sebelum pembedaan ini ada, panggilan
+ * yang datang beruntun membuat pemutaran pertama dianggap gagal, lalu nomornya
+ * dibacakan ulang oleh suara peramban — terdengar sebagai dua suara bertumpuk.
+ */
+export type HasilPutar = 'selesai' | 'gagal' | 'diganti'
+
 export function useCallSound() {
   let element: HTMLAudioElement | null = null
+  /** Penghenti pemutaran yang sedang berjalan; diisi ulang tiap kali `play()` dipanggil. */
+  let hentikanYangBerjalan: (() => void) | null = null
 
   function audio(): HTMLAudioElement | null {
     if (typeof window === 'undefined') return null
@@ -22,34 +36,40 @@ export function useCallSound() {
    * Putar satu berkas sampai selesai.
    *
    * Selalu ada batas waktu: berkas yang macet di tengah jaringan tidak boleh
-   * menggantung panggilan berikutnya. Mengembalikan `false` bila gagal — pemanggil
-   * yang memutuskan apakah perlu jatuh ke cara lain.
+   * menggantung panggilan berikutnya.
    */
-  function play(url: string, options: { volume?: number, timeoutMs?: number } = {}): Promise<boolean> {
+  function play(url: string, options: { volume?: number, timeoutMs?: number } = {}): Promise<HasilPutar> {
     const el = audio()
-    if (!el) return Promise.resolve(false)
+    if (!el) return Promise.resolve('gagal')
+
+    // Pemutaran sebelumnya ditutup dulu sebagai "diganti", bukan dibiarkan
+    // menunggu batas waktunya sendiri lalu melapor gagal.
+    hentikanYangBerjalan?.()
 
     const timeoutMs = options.timeoutMs ?? 15_000
 
-    return new Promise<boolean>((resolve) => {
+    return new Promise<HasilPutar>((resolve) => {
       let selesai = false
-      const beres = (ok: boolean) => {
+      const beres = (hasil: HasilPutar) => {
         if (selesai) return
         selesai = true
         clearTimeout(timer)
         el.onended = null
         el.onerror = null
-        resolve(ok)
+        if (hentikanYangBerjalan === diganti) hentikanYangBerjalan = null
+        resolve(hasil)
       }
+      const diganti = () => beres('diganti')
 
-      const timer = setTimeout(() => beres(false), timeoutMs)
+      const timer = setTimeout(() => beres('gagal'), timeoutMs)
+      hentikanYangBerjalan = diganti
 
-      el.onended = () => beres(true)
-      el.onerror = () => beres(false)
+      el.onended = () => beres('selesai')
+      el.onerror = () => beres('gagal')
       el.volume = options.volume ?? 1
       el.src = url
       el.currentTime = 0
-      el.play().catch(() => beres(false))
+      el.play().catch(() => beres('gagal'))
     })
   }
 

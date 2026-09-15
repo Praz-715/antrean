@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { SYSTEM_TONES } from '#shared/constants/tones'
 import { apiFetch } from '../../composables/useApi'
 import { SOCKET_EVENTS } from '#shared/constants/socket'
 import { PRIORITY_LABEL, isPriorityQueue } from '#shared/constants/queue'
@@ -206,13 +207,29 @@ const audioUnlocked = ref(false)
  * suara peramban. Layar antrean yang bisu jauh lebih merugikan daripada suara yang
  * kurang bagus.
  */
+let urutanPanggilan = 0
+
 async function announceCall(payload: CallPayload, priority: boolean) {
   const settings = state.value?.settings
   if (!settings?.voiceEnabled) return
 
+  /**
+   * Hanya panggilan TERBARU yang boleh bersuara.
+   *
+   * Operator sering menekan panggil beberapa kali beruntun, dan tiap pengumuman
+   * menunggu berkasnya selesai. Tanpa nomor urut ini, pengumuman lama melanjutkan
+   * sisa langkahnya setelah yang baru mulai — hasilnya dua suara bertumpuk.
+   */
+  const saya = ++urutanPanggilan
+  const masihTerbaru = () => saya === urutanPanggilan
+
+  // Ucapan peramban dari panggilan sebelumnya dihentikan, bukan dibiarkan mengantre.
+  speech.cancel()
+
   const adaNada = !!settings.voiceChimeUrl
   if (adaNada) {
-    await callSound.play(settings.voiceChimeUrl!, { timeoutMs: 8000 })
+    const hasilNada = await callSound.play(settings.voiceChimeUrl!, { timeoutMs: 8000 })
+    if (hasilNada === 'diganti' || !masihTerbaru()) return
   }
 
   /**
@@ -229,12 +246,20 @@ async function announceCall(payload: CallPayload, priority: boolean) {
     priority,
   })
 
-  if (settings.voiceProvider === 'external') {
+  /**
+   * Google Translate dan TTS eksternal sama-sama diambil lewat endpoint server
+   * sendiri — layar tidak pernah menghubungi layanan luar langsung.
+   */
+  if (settings.voiceProvider === 'external' || settings.voiceProvider === 'gtranslate') {
     const url = `/api/display/${deviceCode}/tts?text=${encodeURIComponent(teks)}`
-    const berhasil = await callSound.play(url, { timeoutMs: 12_000 })
-    if (berhasil) return
+    const hasil = await callSound.play(url, { timeoutMs: 12_000 })
+
+    // Selesai: sudah terdengar. Diganti: panggilan lain yang memegang audio sekarang.
+    // Hanya kegagalan sungguhan yang boleh jatuh ke suara peramban.
+    if (hasil !== 'gagal') return
   }
 
+  if (!masihTerbaru()) return
   speech.speak(teks)
 }
 
@@ -319,8 +344,19 @@ const { isFullscreen, supported: fullscreenSupported, toggle: toggleFullscreen }
 /** Browser memblokir suara sampai ada interaksi pengguna — sediakan satu tombol. */
 async function unlockAudio() {
   speech.speak('Pengumuman suara aktif.', 1)
-  // Elemen audio punya izinnya sendiri: nada panggil & TTS eksternal ikut dibuka di sini.
-  await callSound.unlock(state.value?.settings?.voiceChimeUrl)
+
+  /**
+   * Elemen audio punya izinnya sendiri, dan izin itu melekat pada ELEMEN — bukan
+   * pada berkasnya. Karena itu ia harus disentuh sekali di sini apa pun setelannya.
+   *
+   * Sebelumnya hanya nada panggil yang dipakai membukanya, sehingga event yang
+   * memakai TTS (Google Translate atau layanan sendiri) TANPA nada panggil tidak
+   * pernah mendapat izin — panggilannya selalu jatuh diam-diam ke suara peramban.
+   * Bila nadanya kosong, nada bawaan sistem yang dipakai sebagai pembuka; diputar
+   * tanpa volume, jadi tidak terdengar siapa pun. Berkas hening berbentuk `data:`
+   * tidak bisa dipakai karena CSP hanya mengizinkan media dari origin sendiri.
+   */
+  await callSound.unlock(state.value?.settings?.voiceChimeUrl ?? SYSTEM_TONES[0]!.url)
   audioUnlocked.value = true
 }
 

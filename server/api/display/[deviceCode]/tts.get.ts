@@ -4,11 +4,15 @@ import { errors } from '../../../utils/response'
 import { prisma } from '../../../utils/prisma'
 import { settingService } from '../../../services/setting.service'
 import { safeFetchBinary } from '../../../utils/ssrf'
+import { GOOGLE_TTS_HEADERS, googleTranslateTtsUrl } from '../../../utils/google-translate-tts'
 import { SETTING_KEYS } from '../../../../shared/constants/settings'
 import { ERROR_CODES } from '../../../../shared/constants/errors'
 
 /**
- * Suara panggilan dari layanan TTS eksternal (§22).
+ * Suara panggilan dari layanan TTS di luar perangkat (§22).
+ *
+ * Dua sumber lewat satu pintu: mesin Google Translate (gratis, tanpa kunci) dan
+ * layanan TTS milik sendiri yang alamatnya ditulis admin.
  *
  * Layar TIDAK memanggil layanan TTS-nya langsung, melainkan lewat endpoint ini.
  * Tiga alasannya:
@@ -42,27 +46,44 @@ export default defineApiHandler(async (event) => {
 
   const settings = await settingService.forEvent(device.event)
 
-  if (String(settings[SETTING_KEYS.DISPLAY_VOICE_PROVIDER]) !== 'external') {
-    throw errors.badRequest(ERROR_CODES.VALIDATION_ERROR, 'Sumber suara event ini bukan TTS eksternal')
-  }
-
-  const template = String(settings[SETTING_KEYS.DISPLAY_VOICE_EXTERNAL_URL] ?? '').trim()
-  if (!template.includes('{text}')) {
+  const provider = String(settings[SETTING_KEYS.DISPLAY_VOICE_PROVIDER])
+  if (provider !== 'external' && provider !== 'gtranslate') {
     throw errors.badRequest(
       ERROR_CODES.VALIDATION_ERROR,
-      'URL TTS eksternal belum diisi atau tidak memuat penanda {text}',
+      'Sumber suara event ini tidak memakai layanan TTS',
     )
   }
 
-  const target = template
-    .replaceAll('{text}', encodeURIComponent(text))
-    .replaceAll('{lang}', encodeURIComponent(String(settings[SETTING_KEYS.DISPLAY_VOICE_LANGUAGE] ?? 'id-ID')))
+  const language = String(settings[SETTING_KEYS.DISPLAY_VOICE_LANGUAGE] ?? 'id-ID')
 
-  const response = await safeFetchBinary(target, { timeoutMs: 8000, maxBytes: MAX_AUDIO_BYTES })
+  let target: string
+  let headers: Record<string, string> | undefined
+
+  if (provider === 'gtranslate') {
+    target = googleTranslateTtsUrl(text, language)
+    headers = GOOGLE_TTS_HEADERS
+  }
+  else {
+    const template = String(settings[SETTING_KEYS.DISPLAY_VOICE_EXTERNAL_URL] ?? '').trim()
+    if (!template.includes('{text}')) {
+      throw errors.badRequest(
+        ERROR_CODES.VALIDATION_ERROR,
+        'URL TTS eksternal belum diisi atau tidak memuat penanda {text}',
+      )
+    }
+
+    target = template
+      .replaceAll('{text}', encodeURIComponent(text))
+      .replaceAll('{lang}', encodeURIComponent(language))
+  }
+
+  const response = await safeFetchBinary(target, { timeoutMs: 8000, maxBytes: MAX_AUDIO_BYTES, headers })
   if (!response.ok) {
     throw errors.badRequest(
       ERROR_CODES.DATA_SOURCE_UNREACHABLE,
-      `Layanan TTS menjawab HTTP ${response.status}`,
+      provider === 'gtranslate'
+        ? `Google Translate menjawab HTTP ${response.status}`
+        : `Layanan TTS menjawab HTTP ${response.status}`,
     )
   }
 

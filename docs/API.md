@@ -593,16 +593,19 @@ pilihan, lihat `shared/constants/tones.ts`) — atau id berkas Media Library. Na
 tidak menyentuh database sama sekali dan tidak bisa terhapus dari halaman Media, jadi
 instalasi baru langsung punya bunyi tanpa harus mengunggah apa pun.
 
-**Tiga mode suara.** `browser` membacakan nomor dengan suara peramban, `external`
-memakai TTS eksternal lewat proxy, dan `chime` TIDAK membacakan nomor sama sekali —
-cukup berkas audio dari Media Library. Nada panggil (`voiceChimeUrl`) dibunyikan lebih
+**Empat mode suara.** `browser` membacakan nomor dengan suara yang terpasang di
+perangkat layar, `gtranslate` memakai mesin TTS Google Translate lewat proxy (gratis,
+tanpa kunci API, butuh internet), `external` memakai layanan TTS sendiri lewat proxy
+yang sama, dan `chime` TIDAK membacakan nomor sama sekali — cukup berkas audio dari
+Media Library. Nada panggil (`voiceChimeUrl`) dibunyikan lebih
 dulu pada ketiga mode. Bila mode `chime` dipilih tetapi nadanya belum diatur, layar
 jatuh ke suara peramban: panggilan yang tidak berbunyi sama sekali lebih merugikan
 daripada suara bawaan.
 
-**TTS eksternal lewat proxy.** Bila `voiceProvider = external`, layar TIDAK memanggil
-layanan TTS langsung melainkan `GET /api/display/{deviceCode}/tts?text=…`. Server yang
-memanggil layanan aslinya memakai templat URL dari pengaturan (`{text}` dan `{lang}`),
+**TTS lewat proxy.** Bila `voiceProvider` bernilai `gtranslate` atau `external`, layar
+TIDAK memanggil layanan TTS langsung melainkan `GET /api/display/{deviceCode}/tts?text=…`.
+Untuk `gtranslate` server menyusun sendiri alamat mesin Translate (`server/utils/google-translate-tts.ts`);
+untuk `external` ia memakai templat URL dari pengaturan (`{text}` dan `{lang}`),
 dengan penjaga SSRF yang sama seperti sumber data, batas waktu 8 detik, batas 2 MB, dan
 penolakan jawaban yang bukan `audio/*`. Alasannya: templat URL sering memuat kunci API —
 kalau dipanggil dari peramban, kuncinya terbaca siapa pun yang membuka layar — dan CSP

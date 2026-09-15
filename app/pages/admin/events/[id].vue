@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { VOICE_PROVIDER_OPTIONS } from '#shared/constants/settings'
 import { apiFetch } from '../../../composables/useApi'
 import { EVENT_STATUS_COLOR, EVENT_STATUS_LABEL } from '#shared/utils/queue-format'
 import { PERMISSIONS } from '#shared/constants/permissions'
@@ -151,7 +152,7 @@ const overrides = reactive<{
   voiceEnabled: boolean | null
   /** Id berkas audio; string kosong berarti "tanpa nada", null berarti ikut sistem. */
   voiceChimeMediaId: string | null
-  /** 'browser' | 'external' | 'chime'; null berarti ikut sistem. */
+  /** Salah satu VOICE_PROVIDERS; null berarti ikut pengaturan sistem. */
   voiceProvider: string | null
 }>({ recallLimit: null, maxWaitingPerType: null, ratingEnabled: null, voiceEnabled: null, voiceChimeMediaId: null, voiceProvider: null })
 
@@ -172,6 +173,17 @@ function mediaOptions(type: 'IMAGE' | 'AUDIO', current?: string) {
  * Nada panggil disimpan sebagai nilai, bukan URL — sama seperti di pengaturan sistem:
  * `system:toneN` untuk nada bawaan, atau id berkas Media Library.
  */
+/**
+ * Pilihan sumber suara diambil dari katalog pengaturan, bukan ditulis ulang di sini.
+ *
+ * Sebelumnya halaman ini punya daftarnya sendiri — dan ketika sumber baru
+ * ditambahkan, ia tidak pernah muncul di sini tanpa ada yang menyadarinya.
+ */
+const pilihanSumberSuara = [
+  { label: 'Ikuti pengaturan sistem', value: 'inherit' },
+  ...VOICE_PROVIDER_OPTIONS,
+]
+
 const chimeOptions = computed(() => [
   { label: 'Ikuti pengaturan sistem', value: SELECT_IKUT },
   { label: 'Tanpa nada panggil', value: SELECT_KOSONG },
@@ -664,12 +676,7 @@ function copyAll(fromDay: number) {
               :model-value="overrides.voiceProvider ?? 'inherit'"
               class="w-full"
               :disabled="!can(PERMISSIONS.EVENT_MANAGE)"
-              :items="[
-                { label: 'Ikuti pengaturan sistem', value: 'inherit' },
-                { label: 'Suara peramban', value: 'browser' },
-                { label: 'TTS eksternal', value: 'external' },
-                { label: 'Hanya nada panggil', value: 'chime' },
-              ]"
+              :items="pilihanSumberSuara"
               @update:model-value="(v: string) => (overrides.voiceProvider = v === 'inherit' ? null : v)"
             />
           </UFormField>

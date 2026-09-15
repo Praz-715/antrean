@@ -113,7 +113,7 @@ Halaman publik contoh: `http://localhost:3000/p/demo2026`
 | `npm run smoke:phase6` | Uji analytics, laporan, ekspor, dan audit log |
 | `npm run smoke:phase7` | Uji pengaturan, rating, integrasi data source, dan autofill |
 | `npm run smoke:phase8` | Uji penjadwal otomatis, header keamanan, rate limit, unggahan |
-| `npm run smoke:voice` | Uji suara panggilan di layar **memakai data nyata** (event, halaman publik, akun operator): nada dari Media Library, nada bawaan sistem, dan mode "hanya nada" — menambah 3 nomor ke papan hari ini |
+| `npm run smoke:voice` | Uji suara panggilan di layar **memakai data nyata** (event, halaman publik, akun operator): nada dari Media Library, nada bawaan sistem, mode "hanya nada", suara Google Translate, dan dua panggilan beruntun pada satu layar — menambah 5 nomor ke papan hari ini |
 | `npm run load-test` | Uji beban ringan: 2.000 antrean + 200 display |
 | `npm run ux-audit` | Audit Function/UI/UX lewat peramban: responsif, kontras, aksesibilitas, umpan balik |
 | `npm run typecheck` | Pemeriksaan tipe |
@@ -257,6 +257,28 @@ tampilannya berubah terang hanya bila pengguna memang memilih tema terang.
   menampilkannya sebagai bilah pemilih layanan. Loket tanpa layanan tidak bisa ditempati, dan
   layanan loket tidak bisa dikosongkan selama masih ada operator di sana. Konsekuensinya skrip uji
   membuat operator + loketnya sendiri — bukan memakai akun operator demo bersama.
+- **Suara panggilan punya empat sumber (§22).** `browser` memakai suara yang terpasang di
+  perangkat layar — gratis dan tanpa internet, tetapi kualitasnya berbeda-beda per perangkat.
+  `gtranslate` memakai mesin TTS Google Translate: gratis, tanpa kunci API, dan menyeragamkan
+  suara seluruh layar. Alamatnya disusun sendiri di `server/utils/google-translate-tts.ts` —
+  paket `google-tts-api` sengaja TIDAK dipakai karena satu-satunya yang dibutuhkan darinya
+  hanyalah perangkaian query itu, sementara ia menyeret `axios` 0.21 bercelah tinggi dan sudah
+  tidak dirawat sejak 2022. Perlu diketahui: jalur Translate itu tidak resmi dan bisa dibatasi
+  Google per alamat IP, karena itu layar selalu jatuh ke suara peramban bila permintaannya
+  gagal. `external` untuk layanan TTS berbayar milik sendiri, `chime` hanya membunyikan nada
+  tanpa membacakan nomor. Daftar nilainya hidup di satu tempat (`VOICE_PROVIDERS`) dan dipakai
+  katalog pengaturan sekaligus penimpa per-event — dulu keduanya punya daftar sendiri, dan
+  menambah sumber baru di salah satunya membuat penimpaan per-event ditolak tanpa pesan jelas.
+- **Satu panggilan = satu suara (§22).** Saat operator memanggil dua kali beruntun, pengumuman
+  kedua memotong berkas suara yang pertama. Pemutaran yang dipotong dilaporkan sebagai
+  `diganti`, BUKAN `gagal` (`useCallSound`), dan tiap pengumuman memegang nomor urut sehingga
+  hanya yang terbaru boleh bersuara — tanpa dua pembedaan itu, panggilan pertama menganggap
+  dirinya gagal lalu mengulang nomornya dengan suara peramban tepat saat berkas nomor kedua
+  berbunyi: satu-satunya penyebab "suara dobel" yang dilaporkan di lapangan. Suara peramban
+  kini hanya dipakai bila pemutaran benar-benar gagal. Panel operator pun tidak lagi ikut
+  membacakan nomor secara bawaan (bisa dinyalakan per perangkat, diingat di `localStorage`) —
+  satu ruangan dengan layar dan panel operator sebelumnya mendengar nomor yang sama dua kali.
+  Dijaga oleh dua pemeriksaan terakhir `npm run smoke:voice`.
 - **Pagar lokasi halaman publik (§36).** Halaman bisa dikunci agar hanya terbuka dalam radius
   tertentu dari satu titik — diatur di tab **Lokasi** pada builder, lengkap dengan penguraian
   tautan Google Maps dan tombol "Lokasi saya". Diperiksa di SERVER pada setiap endpoint publik,

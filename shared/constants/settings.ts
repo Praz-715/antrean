@@ -54,6 +54,25 @@ export function parseLanding(raw: unknown): { mode: LandingMode, eventId: string
   return { mode: 'none', eventId: null }
 }
 
+/**
+ * Sumber suara panggilan di layar antrean.
+ *
+ * Satu daftar untuk dua pemakai: katalog pengaturan di berkas ini DAN penimpa
+ * per-event di `shared/schemas/event.ts`. Sebelumnya keduanya menulis daftarnya
+ * sendiri, dan menambah satu sumber baru hanya di salah satunya membuat penimpaan
+ * per-event ditolak tanpa pesan yang jelas.
+ */
+export const VOICE_PROVIDERS = ['browser', 'gtranslate', 'external', 'chime'] as const
+export type VoiceProvider = (typeof VOICE_PROVIDERS)[number]
+
+/** Label untuk ketiga tempat yang menawarkannya: katalog, halaman event, dan builder. */
+export const VOICE_PROVIDER_OPTIONS: Array<{ label: string, value: VoiceProvider }> = [
+  { label: 'Suara peramban (bawaan)', value: 'browser' },
+  { label: 'Google Translate (gratis, butuh internet)', value: 'gtranslate' },
+  { label: 'TTS eksternal', value: 'external' },
+  { label: 'Hanya nada panggil (tanpa suara bicara)', value: 'chime' },
+]
+
 /** Nada bawaan sistem memakai awalan ini; sisanya dianggap id berkas Media Library. */
 export const SYSTEM_TONE_VALUE_PREFIX = 'system:'
 
@@ -233,15 +252,11 @@ export const SETTINGS_CATALOG: SettingDefinition[] = [
   {
     key: SETTING_KEYS.DISPLAY_VOICE_PROVIDER,
     label: 'Sumber suara',
-    help: 'Suara peramban membacakan nomornya (tidak perlu internet). TTS eksternal dipakai bila butuh suara yang lebih manusiawi. "Hanya nada panggil" tidak membacakan nomor sama sekali — cukup bunyi dari Media Library, cocok bila nomornya sudah jelas terbaca di layar.',
+    help: 'Suara peramban memakai suara yang terpasang di perangkat layar (tidak perlu internet, tetapi kualitasnya beda-beda per perangkat). Google Translate menyeragamkan suara semua layar tanpa kunci API, asalkan ada internet. TTS eksternal untuk layanan berbayar milik sendiri. "Hanya nada panggil" tidak membacakan nomor sama sekali — cukup bunyi dari Media Library.',
     group: 'display',
     type: 'select',
     default: 'browser',
-    options: [
-      { label: 'Suara peramban (bawaan)', value: 'browser' },
-      { label: 'TTS eksternal', value: 'external' },
-      { label: 'Hanya nada panggil (tanpa suara bicara)', value: 'chime' },
-    ],
+    options: VOICE_PROVIDER_OPTIONS,
     eventOverride: 'voiceProvider',
   },
   {

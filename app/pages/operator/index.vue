@@ -70,7 +70,34 @@ await loadBoard()
 watch(activeTypeId, loadBoard)
 
 // ---- suara & realtime ----
-const speech = useSpeech({ language: 'id-ID', repeat: 1 })
+
+/**
+ * Panel operator bisa ikut membacakan nomor, tetapi BAWAANNYA mati.
+ *
+ * Layar antreanlah yang bertugas mengumumkan. Bila panel ini juga bersuara —
+ * dan operator biasanya duduk di ruangan yang sama dengan layarnya — satu panggilan
+ * terdengar dua kali, dengan dua mesin suara berbeda pula bila layarnya memakai TTS.
+ * Yang membutuhkannya (loket tanpa layar) cukup menyalakan sekali; pilihannya
+ * diingat di peramban ini.
+ */
+const SUARA_OPERATOR = 'antrean:operator:suara'
+const speech = useSpeech({ language: 'id-ID', repeat: 1, enabled: false })
+
+onMounted(() => {
+  try {
+    speech.settings.enabled = window.localStorage.getItem(SUARA_OPERATOR) === '1'
+  }
+  catch {
+    // Penyimpanan diblokir peramban — biarkan mati, operator bisa menyalakannya lagi.
+  }
+})
+
+watch(() => speech.settings.enabled, (nyala) => {
+  try {
+    window.localStorage.setItem(SUARA_OPERATOR, nyala ? '1' : '0')
+  }
+  catch { /* sama seperti di atas: tidak fatal */ }
+})
 const { connected, on } = useSocket({ role: 'operator' })
 
 on(SOCKET_EVENTS.QUEUE_CREATED, () => loadBoard())
@@ -274,7 +301,9 @@ function timeOf(value: string | null) {
             variant="ghost"
             color="neutral"
             :aria-label="speech.settings.enabled ? 'Matikan suara panggilan' : 'Nyalakan suara panggilan'"
-            :title="speech.settings.enabled ? 'Matikan suara' : 'Nyalakan suara'"
+            :title="speech.settings.enabled
+              ? 'Matikan suara di panel ini (layar antrean tetap mengumumkan)'
+              : 'Bacakan juga nomornya di panel ini — untuk loket tanpa layar antrean'"
             @click="speech.settings.enabled = !speech.settings.enabled"
           />
           <UButton icon="i-lucide-refresh-cw" aria-label="Muat ulang papan antrean" title="Muat ulang papan antrean" variant="ghost" color="neutral" :loading="loading" @click="loadBoard" />

@@ -10,10 +10,12 @@
  *  1. berkas audio pilihan admin sampai ke layar sebagai URL siap putar;
  *  2. saat operator memanggil, berkas ITU yang benar-benar diputar (bukan hanya TTS);
  *  3. mode "hanya nada panggil" memang tidak membacakan nomor;
- *  4. mode "suara peramban" membacakan nomor SETELAH nadanya selesai.
+ *  4. mode "suara peramban" membacakan nomor SETELAH nadanya selesai;
+ *  5. mode Google Translate memutar berkas dari server sendiri, bukan suara peramban;
+ *  6. dua panggilan beruntun pada satu layar tetap satu panggilan = satu suara.
  *
- * Karena memakai data nyata, uji ini MENAMBAH dua nomor antrean pada papan hari ini
- * (satu per putaran). Nomor yang masih aktif dibatalkan saat bersih-bersih, tetapi
+ * Karena memakai data nyata, uji ini MENAMBAH beberapa nomor antrean pada papan hari
+ * ini (satu per putaran, dua untuk putaran terakhir). Nomor yang masih aktif dibatalkan saat bersih-bersih, tetapi
  * yang terlanjur selesai tetap tercatat seperti antrean biasa — itu konsekuensi yang
  * disengaja dari menguji di data sungguhan, bukan kebocoran.
  *
@@ -220,6 +222,41 @@ async function main() {
     record('nada bawaan sistem benar-benar diputar saat dipanggil',
       !!nadaBawaan && nadaBawaan.src.endsWith(bawaan.url),
       nadaBawaan ? nadaBawaan.src.split('/').slice(-2).join('/') : 'tidak ada audio.play() saat panggilan')
+
+    // ---------- 5. mode "Google Translate": nomor dibacakan lewat berkas, bukan suara peramban ----------
+    /**
+     * Nada panggil sengaja dikosongkan supaya satu-satunya audio yang terdengar
+     * adalah suara TTS-nya — kalau nadanya ikut menyala, keduanya sama-sama
+     * audio.play() dan pemeriksaan di bawah tidak lagi membuktikan apa pun.
+     *
+     * Membutuhkan internet: mesinnya milik Google. Bila jaringannya mati, layar jatuh
+     * ke suara peramban dan pemeriksaan ini gagal dengan jelas — bukan diam-diam lolos.
+     */
+    await api('PATCH', `/api/admin/events/${EVENT_ID}`, {
+      settings: { ...settingsAsli, voiceEnabled: true, voiceProvider: 'gtranslate', voiceChimeMediaId: '' },
+    })
+
+    const jejak4 = await panggilDanDengar(context, perangkat.deviceCode, layanan, publik.data.form, nomorUji)
+    const suaraTts = jejak4.find(j => j.tipe === 'audio' && j.src.includes('/tts?text='))
+    const ucapanPeramban = jejak4.some(j => j.tipe === 'tts')
+
+    record('mode Google Translate memutar berkas suara dari server sendiri',
+      !!suaraTts,
+      suaraTts ? decodeURIComponent(suaraTts.src.split('text=')[1] ?? '').slice(0, 60) : 'tidak ada audio /tts yang diputar')
+    record('mode Google Translate tidak memakai suara peramban selama berhasil',
+      !!suaraTts && !ucapanPeramban,
+      ucapanPeramban ? 'masih jatuh ke suara peramban' : 'hanya berkas suara')
+
+    // ---------- 6. dua panggilan beruntun: satu panggilan tetap satu suara ----------
+    const beruntun = await panggilDuaKaliBeruntun(context, perangkat.deviceCode, layanan, publik.data.form, nomorUji)
+    const audioBeruntun = beruntun.jejak.filter(j => j.tipe === 'audio')
+    const ucapanBeruntun = beruntun.jejak.filter(j => j.tipe === 'tts')
+
+    record('dua panggilan beruntun menghasilkan dua pemutaran berkas',
+      audioBeruntun.length >= 2, `${audioBeruntun.length} pemutaran untuk ${beruntun.dipanggil.join(' & ')}`)
+    record('panggilan yang terpotong TIDAK diulang oleh suara peramban',
+      audioBeruntun.length >= 2 && ucapanBeruntun.length === 0,
+      ucapanBeruntun.length ? `suara peramban ikut berbunyi: ${ucapanBeruntun.map(u => u.teks).join(' / ')}` : 'hanya berkas suara')
   }
   finally {
     await context.close().catch(() => {})
@@ -276,14 +313,14 @@ async function main() {
 const nomorUji = new Set()
 
 /**
- * Satu putaran penuh: buka layar, izinkan bunyi, daftarkan pengunjung, panggil lewat
- * akun operator sungguhan, lalu kembalikan jejak bunyi yang benar-benar terjadi.
+ * Buka satu layar antrean yang SIAP DIDENGAR: tersambung, sudah diizinkan berbunyi,
+ * dan setiap bunyinya tercatat.
  *
  * `play()` dan `speechSynthesis.speak()` disadap DI DALAM halaman karena hanya itu
  * cara mengetahui bunyi benar-benar dimainkan — permintaan jaringan saja tidak cukup,
  * berkas bisa saja terambil lalu ditolak kebijakan autoplay.
  */
-async function panggilDanDengar(context, deviceCode, layanan, form, nomorUji) {
+async function bukaLayar(context, deviceCode) {
   const page = await context.newPage()
   const jejak = []
 
@@ -314,6 +351,26 @@ async function panggilDanDengar(context, deviceCode, layanan, form, nomorUji) {
   await page.waitForFunction(() => !!document.querySelector('#__nuxt')?.__vue_app__, null, { timeout: 30_000 })
   await page.waitForTimeout(2500)
 
+  /**
+   * Sambungan siaran ditunggu sampai benar-benar ONLINE.
+   *
+   * Saat handshake soketnya gagal, layar TIDAK terlihat rusak: papan tetap terisi
+   * lewat polling. Yang hilang hanya siaran panggilan — jadi tidak ada satu pun
+   * pengumuman, dan seluruh pemeriksaan di bawah "lolos" sebagai layar bisu karena
+   * alasan yang tidak ada hubungannya dengan suara.
+   */
+  let tersambung = false
+  for (let i = 0; i < 3 && !tersambung; i++) {
+    tersambung = await page.waitForFunction(() => /ONLINE/.test(document.body.innerText), null, { timeout: 15_000 })
+      .then(() => true)
+      .catch(async () => {
+        await page.reload({ waitUntil: 'domcontentloaded' })
+        await page.waitForTimeout(2000)
+        return false
+      })
+  }
+  if (!tersambung) throw new Error('Layar tidak pernah tersambung ke siaran panggilan (tetap OFFLINE)')
+
   const tombol = page.getByRole('button', { name: /Aktifkan Suara/ })
   if (await tombol.count()) {
     await tombol.first().click()
@@ -322,18 +379,31 @@ async function panggilDanDengar(context, deviceCode, layanan, form, nomorUji) {
 
   // Jejak dari tahap "aktifkan suara" dibuang: yang diuji adalah bunyi saat dipanggil.
   jejak.length = 0
+  return { page, jejak }
+}
 
+/** Nilai formulir pendaftaran seadanya — isinya tidak diperiksa, hanya perlu sah. */
+function nilaiFormulir(form) {
   const nilai = {}
   for (const field of form?.fields ?? []) {
     if (field.type === 'EMAIL') nilai[field.key] = 'uji.suara@contoh.id'
     else if (field.type === 'PHONE') nilai[field.key] = '081200000000'
     else nilai[field.key] = 'Uji Suara'
   }
+  return nilai
+}
+
+/**
+ * Satu putaran penuh: buka layar, daftarkan pengunjung, panggil lewat akun operator
+ * sungguhan, lalu kembalikan jejak bunyi yang benar-benar terjadi.
+ */
+async function panggilDanDengar(context, deviceCode, layanan, form, nomorUji) {
+  const { page, jejak } = await bukaLayar(context, deviceCode)
 
   const tiket = await fetch(`${BASE}/api/public/${PUBLISH_CODE}/queue`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json', Origin: BASE },
-    body: JSON.stringify({ queueTypeId: layanan.id, values: nilai }),
+    body: JSON.stringify({ queueTypeId: layanan.id, values: nilaiFormulir(form) }),
   }).then(r => r.json())
   if (tiket?.data?.queueNumber) nomorUji.add(tiket.data.queueNumber)
 
@@ -362,6 +432,59 @@ async function panggilDanDengar(context, deviceCode, layanan, form, nomorUji) {
   await tidur(7000)
   await page.close()
   return jejak
+}
+
+/**
+ * Dua panggilan beruntun pada SATU layar yang sama.
+ *
+ * Inilah keadaan yang membuat suara terdengar dobel di lapangan: operator menekan
+ * "panggil berikutnya" dua kali berdekatan, dan pengumuman kedua memotong berkas
+ * suara yang pertama. Pemutaran yang dipotong itu dulu dilaporkan sebagai KEGAGALAN,
+ * sehingga pengumuman pertama meneruskan sisa langkahnya dan membacakan nomornya
+ * dengan suara peramban — persis saat berkas nomor kedua sedang berbunyi.
+ *
+ * Satu putaran layar baru tidak pernah menangkapnya: dengan satu panggilan saja tidak
+ * ada yang memotong apa pun.
+ */
+async function panggilDuaKaliBeruntun(context, deviceCode, layanan, form, nomorUji) {
+  const { page, jejak } = await bukaLayar(context, deviceCode)
+
+  for (let i = 0; i < 2; i++) {
+    const tiket = await fetch(`${BASE}/api/public/${PUBLISH_CODE}/queue`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'Origin': BASE, 'X-Forwarded-For': `10.90.0.${i + 1}` },
+      body: JSON.stringify({ queueTypeId: layanan.id, values: nilaiFormulir(form) }),
+    }).then(r => r.json())
+    if (!tiket?.data?.queueNumber) {
+      throw new Error(`Pengunjung uji gagal mengambil nomor: ${tiket?.message ?? 'tanpa pesan'}`)
+    }
+    nomorUji.add(tiket.data.queueNumber)
+  }
+
+  const cookieAdmin = cookie
+  await login(OPERATOR.email, OPERATOR.password)
+  const workspace = (await api('GET', '/api/operator/workspace')).data ?? []
+  const penugasan = workspace.find(a => a.queueType.id === layanan.id) ?? workspace[0]
+  if (!penugasan) {
+    throw new Error(`Operator ${OPERATOR.email} tidak ditempatkan pada loket yang melayani layanan ini`)
+  }
+
+  const dipanggil = []
+  for (let i = 0; i < 2; i++) {
+    const panggilan = await api('POST', '/api/operator/queue/next', {
+      queueTypeId: penugasan.queueType.id,
+      counterId: penugasan.counter?.id ?? null,
+    })
+    if (!panggilan?.success) throw new Error(`Operator gagal memanggil: ${panggilan?.message ?? 'tanpa pesan'}`)
+    dipanggil.push(panggilan.data?.queueNumber)
+    // Jeda sengaja lebih pendek dari durasi suara, supaya yang kedua memotong yang pertama.
+    await tidur(1500)
+  }
+  cookie = cookieAdmin
+
+  await tidur(14_000)
+  await page.close()
+  return { jejak, dipanggil }
 }
 
 /** WAV 8-bit mono setengah detik — dipakai hanya bila organisasi belum punya audio. */

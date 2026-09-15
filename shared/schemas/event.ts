@@ -1,4 +1,5 @@
 import { z } from 'zod'
+import { VOICE_PROVIDERS } from '../constants/settings'
 import { dateSchema, hexColorSchema, slugSchema, timeSchema } from './common'
 
 export const EVENT_STATUSES = ['DRAFT', 'SCHEDULED', 'OPEN', 'PAUSED', 'CLOSED', 'COMPLETED'] as const
@@ -20,7 +21,7 @@ export const eventSettingsSchema = z.object({
   voiceEnabled: z.boolean().optional(),
   voiceLanguage: z.string().max(10).optional(),
   /** Sumber suara panggilan; kosongkan agar ikut pengaturan sistem. */
-  voiceProvider: z.enum(['browser', 'external', 'chime']).optional(),
+  voiceProvider: z.enum(VOICE_PROVIDERS).optional(),
   /**
    * Nada panggil: `system:toneN` (bawaan) atau id berkas Media Library.
    * String kosong = sengaja tanpa nada di event ini.
